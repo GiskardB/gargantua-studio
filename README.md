@@ -5,8 +5,55 @@ unico per progettare, testare e governare workload AI dichiarativamente.
 **Lo Studio non esegue direttamente gli agenti** — produce stato desiderato
 che il [Control Plane](../gargantua-control-plane) versiona e distribuisce.
 
-> Repository non ancora avviato al livello di implementazione. Questo documento
-> ne fissa lo scope prima di scrivere la prima riga di codice.
+> **Stato:** MVP in corso. È implementato l'**Agent Designer** che produce un
+> manifest `gargantua.ai/v1` valido. Gli altri designer sono ancora placeholder.
+
+---
+
+## 0. MVP: Agent Designer (implementato)
+
+App **React + Vite + TypeScript**, client-only: genera ed esporta un manifest
+`gargantua.ai/v1` interamente nel browser, senza backend (il Control Plane —
+Phase 2 — non esiste ancora).
+
+```bash
+npm install
+npm run dev        # http://localhost:5173
+npm run build      # build di produzione in dist/
+npm run test       # unit test del builder/validator (vitest)
+npm run typecheck
+```
+
+Cosa fa:
+
+- Form strutturato su tutte le sezioni della `AgentSpec` — metadata, runtime,
+  model, capabilities, MCP servers, memory layers, routing/roles, guardrails.
+- **Anteprima YAML live** del manifest a ogni modifica.
+- **Validazione** che rispecchia gli invarianti che il Runtime impone nei
+  costruttori dei record (`WorkloadMetadata`, `AgentSpec`, `McpServerSpec`,
+  `ModelSpec`): nomi obbligatori, unicità di capability e server MCP, transport
+  stdio↔command / http-sse↔url, temperature 0–2, maxTokens > 0.
+- **Export** del `manifest.yaml` (bloccato finché ci sono errori) — da validare
+  poi con `gargantua validate` nella CLI del Runtime.
+
+I campi non ancora enforced a livello di workload nel Runtime (`memoryLayers`,
+`allowedRoles`) sono etichettati come tali nell'UI, coerentemente con
+`agent-manifest.md`.
+
+### Struttura del codice
+
+| Path | Contenuto |
+|---|---|
+| `src/types/manifest.ts` | Mirror TS dello schema `gargantua.ai/v1` (allineato 1:1 ai tipi Java di `agent-core`) |
+| `src/types/draft.ts` | Modello editabile del form + draft d'esempio |
+| `src/lib/buildManifest.ts` | Draft → manifest, omette i campi vuoti |
+| `src/lib/validate.ts` | Validazione che rispecchia gli invarianti del Runtime |
+| `src/lib/toYaml.ts` | Serializzazione YAML in ordine di schema |
+| `src/components/` | Agent Designer, anteprima manifest, primitivi di form |
+
+Il contratto di riferimento è congelato in
+[`gargantua/docs/architecture/agent-manifest.md`](../gargantua/docs/architecture/agent-manifest.md)
+e [`gargantua/docs/architecture/gargantua-domain-model.md`](../gargantua/docs/architecture/gargantua-domain-model.md).
 
 ---
 

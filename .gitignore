@@ -1,0 +1,11 @@
+node_modules
+dist
+dist-ssr
+*.local
+.vite
+.DS_Store
+*.log
+
+# TS incremental build info
+tsconfig.tsbuildinfo
+*.tsbuildinfo
