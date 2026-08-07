@@ -1,16 +1,35 @@
-import { useState } from 'react'
-import { CAPABILITIES, CAPABILITY_SCHEMA_SAMPLE } from '../../mock/data'
+import { useEffect, useState } from 'react'
+import { CAPABILITIES, CAPABILITY_SCHEMA_SAMPLE, type CapabilityRow } from '../../mock/data'
 import { Screen, Panel, Badge, Tag, Dot, healthTone } from '../ui'
+import { CodeEditor } from '../CodeEditor'
+import { usePlatformStore } from '../../store/platformStore'
 
 export function CapabilityDesigner() {
-  const [selected, setSelected] = useState(CAPABILITIES[0].name)
-  const cap = CAPABILITIES.find((c) => c.name === selected) ?? CAPABILITIES[0]
+  const live = usePlatformStore((s) => s.capabilities)
+  const source = usePlatformStore((s) => s.source)
+  const refresh = usePlatformStore((s) => s.refresh)
+
+  useEffect(() => {
+    void refresh()
+  }, [refresh])
+
+  // Real Catalog entries when online; sample data otherwise.
+  const capabilities: CapabilityRow[] = live && live.length > 0 ? live : CAPABILITIES
+  const isLive = source === 'live' && (live?.length ?? 0) > 0
+
+  const [selected, setSelected] = useState(capabilities[0]?.name ?? '')
+  const cap = capabilities.find((c) => c.name === selected) ?? capabilities[0]
 
   return (
     <Screen
       title="Capability Designer"
       subtitle="The external contracts callers route on — not agent names. Published to the Catalog."
-      actions={<button className="primary">+ New capability</button>}
+      actions={
+        <>
+          <Badge tone={isLive ? 'good' : 'neutral'}>{isLive ? 'live' : 'sample data'}</Badge>
+          <button className="primary">+ New capability</button>
+        </>
+      }
     >
       <div className="split-2">
         <Panel title="Catalog">
@@ -25,7 +44,7 @@ export function CapabilityDesigner() {
               </tr>
             </thead>
             <tbody>
-              {CAPABILITIES.map((c) => (
+              {capabilities.map((c) => (
                 <tr
                   key={c.name}
                   className={c.name === selected ? 'row-selected' : 'row-click'}
@@ -33,8 +52,10 @@ export function CapabilityDesigner() {
                 >
                   <td className="mono">{c.name}</td>
                   <td className="mono dim">{c.version}</td>
-                  <td className="dim">{c.implementedBy.length} agent{c.implementedBy.length > 1 ? 's' : ''}</td>
-                  <td className="mono">{c.callsPerDay.toLocaleString()}</td>
+                  <td className="dim">
+                    {c.implementedBy.length} agent{c.implementedBy.length === 1 ? '' : 's'}
+                  </td>
+                  <td className="mono">{c.callsPerDay ? c.callsPerDay.toLocaleString() : '—'}</td>
                   <td><Dot tone={healthTone(c.health)} /></td>
                 </tr>
               ))}
@@ -42,29 +63,35 @@ export function CapabilityDesigner() {
           </table>
         </Panel>
 
-        <Panel title={cap.name} actions={<Badge tone="info">v{cap.version}</Badge>}>
-          <div className="detail">
-            <p className="detail-desc">{cap.description}</p>
+        {cap && (
+          <Panel title={cap.name} actions={<Badge tone="info">v{cap.version}</Badge>}>
+            <div className="detail">
+              <p className="detail-desc">{cap.description || 'No description provided.'}</p>
 
-            <div className="detail-row">
-              <span className="detail-k">Health</span>
-              <span><Dot tone={healthTone(cap.health)} /> {cap.health}</span>
-            </div>
-            <div className="detail-row">
-              <span className="detail-k">Implemented by</span>
-              <span className="mono">{cap.implementedBy.join(', ')}</span>
-            </div>
-            <div className="detail-row">
-              <span className="detail-k">Tags</span>
-              <span className="tags">{cap.tags.map((t) => <Tag key={t}>{t}</Tag>)}</span>
-            </div>
+              <div className="detail-row">
+                <span className="detail-k">Health</span>
+                <span><Dot tone={healthTone(cap.health)} /> {cap.health}</span>
+              </div>
+              <div className="detail-row">
+                <span className="detail-k">Implemented by</span>
+                <span className="mono">{cap.implementedBy.join(', ') || '—'}</span>
+              </div>
+              <div className="detail-row">
+                <span className="detail-k">Tags</span>
+                <span className="tags">
+                  {cap.tags.length ? cap.tags.map((t) => <Tag key={t}>{t}</Tag>) : '—'}
+                </span>
+              </div>
 
-            <div className="detail-schema">
-              <div className="detail-k">Input schema</div>
-              <pre className="code"><code>{CAPABILITY_SCHEMA_SAMPLE}</code></pre>
+              <div className="detail-schema">
+                <div className="detail-k">Input schema {isLive && <span className="dim">(sample)</span>}</div>
+                <div className="schema-editor">
+                  <CodeEditor value={CAPABILITY_SCHEMA_SAMPLE} language="json" readOnly />
+                </div>
+              </div>
             </div>
-          </div>
-        </Panel>
+          </Panel>
+        )}
       </div>
     </Screen>
   )
