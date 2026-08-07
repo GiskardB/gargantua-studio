@@ -9,9 +9,14 @@
 import type { AgentDraft } from '../types/draft'
 import type { SkillDraft } from '../types/skillDraft'
 
+// When VITE_STUDIO_API is *defined* (including an empty string) we honour it; only an
+// entirely unset var falls back to the localhost dev default. Empty string means
+// same-origin/relative — the mode the Docker Compose deployment uses: nginx serves the
+// SPA and reverse-proxies /api and /actuator to the backend, so the browser needs no
+// absolute URL and the app works regardless of host (localhost or a LAN IP like Cave's).
+const configuredBase = import.meta.env.VITE_STUDIO_API as string | undefined
 const BASE: string =
-  (import.meta.env.VITE_STUDIO_API as string | undefined)?.replace(/\/$/, '') ||
-  'http://localhost:8090'
+  configuredBase !== undefined ? configuredBase.replace(/\/$/, '') : 'http://localhost:8090'
 
 export const apiBaseUrl = BASE
 
