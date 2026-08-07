@@ -7,6 +7,7 @@
 // still useful without a running platform — it just can't publish or show live state.
 
 import type { AgentDraft } from '../types/draft'
+import type { SkillDraft } from '../types/skillDraft'
 
 const BASE: string =
   (import.meta.env.VITE_STUDIO_API as string | undefined)?.replace(/\/$/, '') ||
@@ -64,6 +65,22 @@ export async function checkHealth(): Promise<boolean> {
 
 export function buildManifest(draft: AgentDraft): Promise<BuildResult> {
   return request<BuildResult>('/api/studio/manifest/build', {
+    method: 'POST',
+    body: JSON.stringify(draft),
+  })
+}
+
+// ---- skill --------------------------------------------------------------------
+
+export interface SkillBuildResult {
+  valid: boolean
+  markdown: string | null
+  errors: string[]
+}
+
+/** Build the canonical SKILL.md — no publish step, a skill is bundle content. */
+export function buildSkill(draft: SkillDraft): Promise<SkillBuildResult> {
+  return request<SkillBuildResult>('/api/studio/skill/build', {
     method: 'POST',
     body: JSON.stringify(draft),
   })

@@ -13,6 +13,7 @@ interface NavItem {
 const NAV: NavItem[] = [
   { to: '/workload', label: 'Workload Designer', group: 'Design' },
   { to: '/agent', label: 'Agent Designer', group: 'Design', live: true },
+  { to: '/skill', label: 'Skill Designer', group: 'Design', live: true },
   { to: '/capability', label: 'Capability Designer', group: 'Design' },
   { to: '/playground', label: 'Playground', group: 'Test' },
   { to: '/evaluation', label: 'Evaluation Studio', group: 'Test' },

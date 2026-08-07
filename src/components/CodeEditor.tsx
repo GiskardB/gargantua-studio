@@ -1,5 +1,5 @@
 // Monaco editor wrapper. Light "vs" theme to match the Studio. Used for the live
-// manifest YAML and for JSON (capability schemas, guardrail settings).
+// manifest YAML, SKILL.md (markdown), and JSON (capability schemas, guardrail settings).
 //
 // Monaco itself is loaded by @monaco-editor/react's default loader; the surrounding
 // app never blocks on it. If Monaco can't load, only this pane shows a spinner — the
@@ -9,7 +9,7 @@ import Editor from '@monaco-editor/react'
 
 interface Props {
   value: string
-  language: 'yaml' | 'json'
+  language: 'yaml' | 'json' | 'markdown'
   onChange?: (value: string) => void
   readOnly?: boolean
   height?: string | number

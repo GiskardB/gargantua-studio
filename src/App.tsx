@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { Layout } from './components/Layout'
 import { AgentDesignerScreen } from './components/screens/AgentDesignerScreen'
+import { SkillDesignerScreen } from './components/screens/SkillDesignerScreen'
 import { WorkloadDesigner } from './components/screens/WorkloadDesigner'
 import { CapabilityDesigner } from './components/screens/CapabilityDesigner'
 import { Playground } from './components/screens/Playground'
@@ -16,6 +17,7 @@ export default function App() {
       <Route element={<Layout />}>
         <Route index element={<Navigate to="/agent" replace />} />
         <Route path="/agent" element={<AgentDesignerScreen />} />
+        <Route path="/skill" element={<SkillDesignerScreen />} />
         <Route path="/workload" element={<WorkloadDesigner />} />
         <Route path="/capability" element={<CapabilityDesigner />} />
         <Route path="/playground" element={<Playground />} />

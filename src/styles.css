@@ -311,3 +311,19 @@ textarea { resize: vertical; }
 .empty { padding: 40px; text-align: center; color: var(--fg-dim); border: 1px dashed var(--line-2); border-radius: 10px; background: var(--bg-2); }
 
 .editor-loading { display: grid; place-items: center; height: 100%; font-size: 12px; color: var(--fg-mute); font-family: var(--mono); }
+
+/* ---- Skill Designer: list + editor + preview, list on the far left ------- */
+.skill-layout { display: grid; grid-template-columns: 200px 1fr 460px; gap: 18px; align-items: start; }
+.skill-list { display: flex; flex-direction: column; gap: 6px; }
+.skill-item { position: relative; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; background: var(--bg); cursor: pointer; }
+.skill-item:hover { border-color: var(--line-2); }
+.skill-item.on { border-color: var(--accent); background: var(--accent-soft); }
+.skill-item-name { font-size: 12.5px; font-weight: 600; color: var(--fg); }
+.skill-item-meta { display: flex; align-items: center; gap: 6px; margin-top: 4px; font-size: 11px; }
+.skill-item-remove { display: none; position: absolute; top: 6px; right: 8px; font-size: 10px; }
+.skill-item:hover .skill-item-remove { display: inline; }
+
+@media (max-width: 1200px) {
+  .skill-layout { grid-template-columns: 1fr; }
+  .skill-list { flex-direction: row; flex-wrap: wrap; }
+}
