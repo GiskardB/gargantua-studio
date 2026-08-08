@@ -16,6 +16,9 @@ import {
   type Metadata,
   type ModelSpec,
   type RuntimeSpec,
+  type Loadout,
+  type KnowledgeRef,
+  type ResourceRef,
 } from '../types/manifest'
 import type { AgentDraft } from '../types/draft'
 import { parseArgs, parseCsv, parseKeyValueLines, parseOptionalNumber } from './parse'
@@ -140,6 +143,40 @@ function buildGuardrails(d: AgentDraft): Record<string, unknown> | undefined {
   return Object.keys(out).length > 0 ? out : undefined
 }
 
+function buildLoadout(d: AgentDraft): Loadout | undefined {
+  const knowledge: KnowledgeRef[] = d.loadout.knowledge
+    .filter((k) => nonEmpty(k.name))
+    .map((k) => {
+      const ref: KnowledgeRef = { name: k.name.trim() }
+      const description = nonEmpty(k.description)
+      if (description) ref.description = description
+      const maxResults = parseOptionalNumber(k.maxResults)
+      if (maxResults !== undefined) ref.maxResults = maxResults
+      const minScore = parseOptionalNumber(k.minScore)
+      if (minScore !== undefined) ref.minScore = minScore
+      return ref
+    })
+  const memoryScopes = parseCsv(d.loadout.memoryScopesText)
+  const skills = parseCsv(d.loadout.skillsText)
+  const resources: ResourceRef[] = d.loadout.resources
+    .filter((r) => nonEmpty(r.name))
+    .map((r) => {
+      const ref: ResourceRef = { name: r.name.trim() }
+      const type = nonEmpty(r.type)
+      if (type) ref.type = type
+      const uri = nonEmpty(r.uri)
+      if (uri) ref.uri = uri
+      return ref
+    })
+
+  const loadout: Loadout = {}
+  if (knowledge.length > 0) loadout.knowledge = knowledge
+  if (memoryScopes.length > 0) loadout.memoryScopes = memoryScopes
+  if (skills.length > 0) loadout.skills = skills
+  if (resources.length > 0) loadout.resources = resources
+  return Object.keys(loadout).length > 0 ? loadout : undefined
+}
+
 export function buildManifest(d: AgentDraft): AgentManifest {
   const spec: AgentSpec = {}
 
@@ -165,6 +202,9 @@ export function buildManifest(d: AgentDraft): AgentManifest {
 
   const guardrails = buildGuardrails(d)
   if (guardrails) spec.guardrails = guardrails
+
+  const loadout = buildLoadout(d)
+  if (loadout) spec.loadout = loadout
 
   return {
     apiVersion: API_VERSION,

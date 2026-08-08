@@ -21,6 +21,7 @@ const COLORS = {
   capability: { bg: '#eafbf0', border: '#2fa960' },
   mcp: { bg: '#eef6ff', border: '#3a86c8' },
   memory: { bg: '#f4eefb', border: '#8b5cd6' },
+  knowledge: { bg: '#fdeef4', border: '#c8437f' },
 }
 
 function nodeStyle(kind: keyof typeof COLORS): React.CSSProperties {
@@ -105,6 +106,20 @@ function buildGraph(draft: AgentDraft): { nodes: Node[]; edges: Edge[] } {
       position: memAt(i),
       data: { label: `🧠 ${m}` },
       style: nodeStyle('memory'),
+      targetPosition: Position.Left,
+    })
+    edges.push({ id: `e-${id}`, source: agentId, target: id })
+  })
+
+  // Loadout — knowledge bases (the targeted-knowledge part of the loadout)
+  const kbAt = column(1100, draft.loadout.knowledge.length)
+  draft.loadout.knowledge.forEach((k, i) => {
+    const id = `kb-${i}`
+    nodes.push({
+      id,
+      position: kbAt(i),
+      data: { label: `📚 ${k.name || 'knowledge'}` },
+      style: nodeStyle('knowledge'),
       targetPosition: Position.Left,
     })
     edges.push({ id: `e-${id}`, source: agentId, target: id })

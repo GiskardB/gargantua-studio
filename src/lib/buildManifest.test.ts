@@ -50,6 +50,18 @@ describe('buildManifest', () => {
       'pii-input': { enabled: true },
       'max-length': { maxChars: 8000 },
     })
+
+    // Loadout: knowledge bases are first-class with retrieval overrides; empty
+    // overrides are omitted so the runtime inherits the skill defaults.
+    expect(m.spec.loadout?.knowledge).toEqual([
+      { name: 'payments-kb', description: 'Payment policies and refund rules', maxResults: 8, minScore: 0.55 },
+      { name: 'refunds-kb' },
+    ])
+    expect(m.spec.loadout?.memoryScopes).toEqual(['customer-history'])
+    expect(m.spec.loadout?.skills).toEqual(['refund-skill', 'status-skill'])
+    expect(m.spec.loadout?.resources).toEqual([
+      { name: 'refund-form', type: 'file', uri: 'resources/refund.pdf' },
+    ])
   })
 
   it('serializes to YAML in schema order with secret placeholders intact', () => {

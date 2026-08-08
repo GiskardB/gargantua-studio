@@ -72,6 +72,26 @@ export interface McpServer {
   enabled?: boolean
 }
 
+export interface KnowledgeRef {
+  name: string
+  description?: string
+  maxResults?: number
+  minScore?: number
+}
+
+export interface ResourceRef {
+  name: string
+  type?: string
+  uri?: string
+}
+
+export interface Loadout {
+  knowledge?: KnowledgeRef[]
+  memoryScopes?: string[]
+  skills?: string[]
+  resources?: ResourceRef[]
+}
+
 export interface AgentSpec {
   runtime?: RuntimeSpec
   capabilities?: Capability[]
@@ -81,6 +101,7 @@ export interface AgentSpec {
   defaultSkill?: string
   allowedRoles?: string[]
   guardrails?: Record<string, unknown>
+  loadout?: Loadout
 }
 
 export interface AgentManifest {

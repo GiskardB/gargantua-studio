@@ -37,6 +37,28 @@ export interface GuardrailDraft {
   settingsJson: string // a JSON object, e.g. {"enabled": true}
 }
 
+// ---- loadout: the specific knowledge/memory/skills/resources the agent is equipped with
+
+export interface KnowledgeRefDraft {
+  name: string // the knowledge base (vector collection) name
+  description: string
+  maxResults: string // stringly; empty = inherit the skill/runtime default
+  minScore: string // stringly; empty = inherit
+}
+
+export interface ResourceRefDraft {
+  name: string
+  type: string // e.g. file, dataset, http, s3
+  uri: string
+}
+
+export interface LoadoutDraft {
+  knowledge: KnowledgeRefDraft[]
+  memoryScopesText: string // comma-separated named memory collections
+  skillsText: string // comma-separated skill names
+  resources: ResourceRefDraft[]
+}
+
 export interface AgentDraft {
   metadata: {
     name: string
@@ -62,6 +84,7 @@ export interface AgentDraft {
   defaultSkill: string
   allowedRolesText: string // comma-separated
   guardrails: GuardrailDraft[]
+  loadout: LoadoutDraft
 }
 
 export function emptyCapability(): CapabilityDraft {
@@ -96,6 +119,18 @@ export function emptyGuardrail(): GuardrailDraft {
   return { name: '', settingsJson: '{\n  "enabled": true\n}' }
 }
 
+export function emptyKnowledgeRef(): KnowledgeRefDraft {
+  return { name: '', description: '', maxResults: '', minScore: '' }
+}
+
+export function emptyResourceRef(): ResourceRefDraft {
+  return { name: '', type: '', uri: '' }
+}
+
+export function emptyLoadout(): LoadoutDraft {
+  return { knowledge: [], memoryScopesText: '', skillsText: '', resources: [] }
+}
+
 export function emptyDraft(): AgentDraft {
   return {
     metadata: { name: '', version: '', description: '', owner: '', labelsText: '' },
@@ -107,6 +142,7 @@ export function emptyDraft(): AgentDraft {
     defaultSkill: '',
     allowedRolesText: '',
     guardrails: [],
+    loadout: emptyLoadout(),
   }
 }
 
@@ -184,5 +220,19 @@ export function sampleDraft(): AgentDraft {
       { name: 'pii-input', settingsJson: '{\n  "enabled": true\n}' },
       { name: 'max-length', settingsJson: '{\n  "maxChars": 8000\n}' },
     ],
+    loadout: {
+      knowledge: [
+        {
+          name: 'payments-kb',
+          description: 'Payment policies and refund rules',
+          maxResults: '8',
+          minScore: '0.55',
+        },
+        { name: 'refunds-kb', description: '', maxResults: '', minScore: '' },
+      ],
+      memoryScopesText: 'customer-history',
+      skillsText: 'refund-skill, status-skill',
+      resources: [{ name: 'refund-form', type: 'file', uri: 'resources/refund.pdf' }],
+    },
   }
 }

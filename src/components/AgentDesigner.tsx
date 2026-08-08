@@ -3,8 +3,22 @@
 // component only reads the draft and emits a new one, so the manifest preview
 // stays in sync with no extra wiring.
 
-import type { AgentDraft, CapabilityDraft, McpServerDraft, GuardrailDraft } from '../types/draft'
-import { emptyCapability, emptyMcpServer, emptyGuardrail } from '../types/draft'
+import type {
+  AgentDraft,
+  CapabilityDraft,
+  McpServerDraft,
+  GuardrailDraft,
+  LoadoutDraft,
+  KnowledgeRefDraft,
+  ResourceRefDraft,
+} from '../types/draft'
+import {
+  emptyCapability,
+  emptyMcpServer,
+  emptyGuardrail,
+  emptyKnowledgeRef,
+  emptyResourceRef,
+} from '../types/draft'
 import {
   MCP_TRANSPORTS,
   MCP_AUTH_TYPES,
@@ -61,6 +75,26 @@ export function AgentDesigner({ draft, onChange }: Props) {
   const addGuardrail = () => patch({ guardrails: [...draft.guardrails, emptyGuardrail()] })
   const removeGuardrail = (i: number) =>
     patch({ guardrails: draft.guardrails.filter((_, idx) => idx !== i) })
+
+  // ---- loadout (knowledge bases, memory scopes, skills, resources) ----
+  const patchLoadout = (partial: Partial<LoadoutDraft>) =>
+    patch({ loadout: { ...draft.loadout, ...partial } })
+  const setKnowledge = (i: number, partial: Partial<KnowledgeRefDraft>) =>
+    patchLoadout({
+      knowledge: draft.loadout.knowledge.map((k, idx) => (idx === i ? { ...k, ...partial } : k)),
+    })
+  const addKnowledge = () =>
+    patchLoadout({ knowledge: [...draft.loadout.knowledge, emptyKnowledgeRef()] })
+  const removeKnowledge = (i: number) =>
+    patchLoadout({ knowledge: draft.loadout.knowledge.filter((_, idx) => idx !== i) })
+  const setResource = (i: number, partial: Partial<ResourceRefDraft>) =>
+    patchLoadout({
+      resources: draft.loadout.resources.map((r, idx) => (idx === i ? { ...r, ...partial } : r)),
+    })
+  const addResource = () =>
+    patchLoadout({ resources: [...draft.loadout.resources, emptyResourceRef()] })
+  const removeResource = (i: number) =>
+    patchLoadout({ resources: draft.loadout.resources.filter((_, idx) => idx !== i) })
 
   // ---- memory layers (toggle set) ----
   const toggleLayer = (layer: MemoryLayer) => {
@@ -200,6 +234,65 @@ export function AgentDesigner({ draft, onChange }: Props) {
             </button>
           ))}
         </div>
+      </Section>
+
+      <Section
+        title="Loadout"
+        hint="What this agent is equipped with — specific knowledge bases, memory scopes, skills and resources — rather than implicit access to everything. (Reported by the runtime; provisioning is not enforced yet.)"
+      >
+        <div className="sub">Knowledge bases</div>
+        {draft.loadout.knowledge.length === 0 && (
+          <p className="empty">No knowledge bases equipped.</p>
+        )}
+        {draft.loadout.knowledge.map((k, i) => (
+          <div className="card" key={i}>
+            <div className="card-head">
+              <strong>Knowledge {i + 1}</strong>
+              <button className="link danger" onClick={() => removeKnowledge(i)}>remove</button>
+            </div>
+            <div className="grid three">
+              <Field label="Name" required hint="Vector collection / index name">
+                <TextInput value={k.name} onChange={(v) => setKnowledge(i, { name: v })} placeholder="payments-kb" mono />
+              </Field>
+              <Field label="Max results" hint="Empty = skill default">
+                <TextInput value={k.maxResults} onChange={(v) => setKnowledge(i, { maxResults: v })} placeholder="8" mono />
+              </Field>
+              <Field label="Min score" hint="0.0 – 1.0; empty = default">
+                <TextInput value={k.minScore} onChange={(v) => setKnowledge(i, { minScore: v })} placeholder="0.55" mono />
+              </Field>
+            </div>
+            <Field label="Description">
+              <TextInput value={k.description} onChange={(v) => setKnowledge(i, { description: v })} placeholder="Payment policies and refund rules" />
+            </Field>
+          </div>
+        ))}
+        <button className="add" onClick={addKnowledge}>+ Add knowledge base</button>
+
+        <div className="grid two">
+          <Field label="Memory scopes" hint="Comma-separated named memory collections">
+            <TextInput value={draft.loadout.memoryScopesText} onChange={(v) => patchLoadout({ memoryScopesText: v })} placeholder="customer-history" mono />
+          </Field>
+          <Field label="Skills" hint="Comma-separated skill names to equip">
+            <TextInput value={draft.loadout.skillsText} onChange={(v) => patchLoadout({ skillsText: v })} placeholder="refund-skill, status-skill" mono />
+          </Field>
+        </div>
+
+        <div className="sub">Resources</div>
+        {draft.loadout.resources.length === 0 && <p className="empty">No resources equipped.</p>}
+        {draft.loadout.resources.map((r, i) => (
+          <div className="card" key={i}>
+            <div className="card-head">
+              <strong>Resource {i + 1}</strong>
+              <button className="link danger" onClick={() => removeResource(i)}>remove</button>
+            </div>
+            <div className="grid three">
+              <Field label="Name" required><TextInput value={r.name} onChange={(v) => setResource(i, { name: v })} placeholder="refund-form" mono /></Field>
+              <Field label="Type" hint="file, dataset, http, s3…"><TextInput value={r.type} onChange={(v) => setResource(i, { type: v })} placeholder="file" mono /></Field>
+              <Field label="URI" hint="No secrets — reference by ${secrets.NAME}"><TextInput value={r.uri} onChange={(v) => setResource(i, { uri: v })} placeholder="resources/refund.pdf" mono /></Field>
+            </div>
+          </div>
+        ))}
+        <button className="add" onClick={addResource}>+ Add resource</button>
       </Section>
 
       <Section title="Routing & roles">
