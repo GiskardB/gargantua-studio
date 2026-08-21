@@ -11,6 +11,8 @@ import type {
   LoadoutDraft,
   KnowledgeRefDraft,
   ResourceRefDraft,
+  GovernanceDraft,
+  Visibility,
 } from '../types/draft'
 import {
   emptyCapability,
@@ -96,6 +98,10 @@ export function AgentDesigner({ draft, onChange }: Props) {
   const removeResource = (i: number) =>
     patchLoadout({ resources: draft.loadout.resources.filter((_, idx) => idx !== i) })
 
+  // ---- governance (tenant, visibility, status, ACL) ----
+  const patchGovernance = (partial: Partial<GovernanceDraft>) =>
+    patch({ governance: { ...draft.governance, ...partial } })
+
   // ---- memory layers (toggle set) ----
   const toggleLayer = (layer: MemoryLayer) => {
     const has = draft.memoryLayers.includes(layer)
@@ -128,6 +134,30 @@ export function AgentDesigner({ draft, onChange }: Props) {
             <TextArea value={draft.metadata.labelsText} onChange={(v) => patchMeta({ labelsText: v })} placeholder={'env=prod\ntier=critical'} rows={2} mono />
           </Field>
         </div>
+      </Section>
+
+      <Section
+        title="Governance"
+        hint="Cross-cutting ownership and visibility for the Catalog. Reported now; the Policy Manager enforces it later. (created/updated timestamps are assigned by the Control Plane.)"
+      >
+        <div className="grid three">
+          <Field label="Tenant" hint="Owning tenant/organisation; blank = default">
+            <TextInput value={draft.governance.tenant} onChange={(v) => patchGovernance({ tenant: v })} placeholder="payments" mono />
+          </Field>
+          <Field label="Visibility" hint="Blank = private (the safe default)">
+            <Select
+              value={draft.governance.visibility}
+              options={['', 'private', 'internal', 'public'] as const}
+              onChange={(v: Visibility | '') => patchGovernance({ visibility: v })}
+            />
+          </Field>
+          <Field label="Status" hint="Free-form lifecycle label">
+            <TextInput value={draft.governance.status} onChange={(v) => patchGovernance({ status: v })} placeholder="active" mono />
+          </Field>
+        </div>
+        <Field label="Access (ACL)" hint="Comma-separated roles/principals granted access beyond what visibility implies">
+          <TextInput value={draft.governance.accessText} onChange={(v) => patchGovernance({ accessText: v })} placeholder="support-agent, super-admin" />
+        </Field>
       </Section>
 
       <Section title="Runtime" hint="Which image the bundle needs. Leave blank for the platform default.">

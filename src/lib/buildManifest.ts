@@ -19,6 +19,7 @@ import {
   type Loadout,
   type KnowledgeRef,
   type ResourceRef,
+  type Governance,
 } from '../types/manifest'
 import type { AgentDraft } from '../types/draft'
 import { parseArgs, parseCsv, parseKeyValueLines, parseOptionalNumber } from './parse'
@@ -26,6 +27,20 @@ import { parseArgs, parseCsv, parseKeyValueLines, parseOptionalNumber } from './
 function nonEmpty(s: string): string | undefined {
   const t = s.trim()
   return t === '' ? undefined : t
+}
+
+function buildGovernance(d: AgentDraft): Governance | undefined {
+  const g = d.governance
+  const gov: Governance = {}
+  const tenant = nonEmpty(g.tenant)
+  if (tenant) gov.tenant = tenant
+  // Only emit visibility when it departs from the private default.
+  if (g.visibility && g.visibility !== 'private') gov.visibility = g.visibility
+  const status = nonEmpty(g.status)
+  if (status) gov.status = status
+  const access = parseCsv(g.accessText)
+  if (access.length > 0) gov.access = access
+  return Object.keys(gov).length > 0 ? gov : undefined
 }
 
 function buildMetadata(d: AgentDraft): Metadata {
@@ -39,6 +54,8 @@ function buildMetadata(d: AgentDraft): Metadata {
   const owner = nonEmpty(d.metadata.owner)
   if (owner) meta.owner = owner
   if (Object.keys(labels).length > 0) meta.labels = labels
+  const governance = buildGovernance(d)
+  if (governance) meta.governance = governance
   return meta
 }
 

@@ -62,6 +62,14 @@ describe('buildManifest', () => {
     expect(m.spec.loadout?.resources).toEqual([
       { name: 'refund-form', type: 'file', uri: 'resources/refund.pdf' },
     ])
+
+    // Governance nests under metadata; visibility is only emitted when it leaves 'private'.
+    expect(m.metadata.governance).toEqual({
+      tenant: 'payments',
+      visibility: 'internal',
+      status: 'active',
+      access: ['support-agent', 'super-admin'],
+    })
   })
 
   it('serializes to YAML in schema order with secret placeholders intact', () => {

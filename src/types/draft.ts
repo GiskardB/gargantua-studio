@@ -59,6 +59,17 @@ export interface LoadoutDraft {
   resources: ResourceRefDraft[]
 }
 
+// ---- governance: cross-cutting ownership/visibility/lifecycle (Control-Plane concern)
+
+export type Visibility = 'private' | 'internal' | 'public'
+
+export interface GovernanceDraft {
+  tenant: string
+  visibility: Visibility | '' // '' = inherit the private default
+  status: string // free-form lifecycle label, e.g. draft/active/deprecated
+  accessText: string // comma-separated ACL (roles/principals)
+}
+
 export interface AgentDraft {
   metadata: {
     name: string
@@ -85,6 +96,7 @@ export interface AgentDraft {
   allowedRolesText: string // comma-separated
   guardrails: GuardrailDraft[]
   loadout: LoadoutDraft
+  governance: GovernanceDraft
 }
 
 export function emptyCapability(): CapabilityDraft {
@@ -131,6 +143,10 @@ export function emptyLoadout(): LoadoutDraft {
   return { knowledge: [], memoryScopesText: '', skillsText: '', resources: [] }
 }
 
+export function emptyGovernance(): GovernanceDraft {
+  return { tenant: '', visibility: '', status: '', accessText: '' }
+}
+
 export function emptyDraft(): AgentDraft {
   return {
     metadata: { name: '', version: '', description: '', owner: '', labelsText: '' },
@@ -143,6 +159,7 @@ export function emptyDraft(): AgentDraft {
     allowedRolesText: '',
     guardrails: [],
     loadout: emptyLoadout(),
+    governance: emptyGovernance(),
   }
 }
 
@@ -233,6 +250,12 @@ export function sampleDraft(): AgentDraft {
       memoryScopesText: 'customer-history',
       skillsText: 'refund-skill, status-skill',
       resources: [{ name: 'refund-form', type: 'file', uri: 'resources/refund.pdf' }],
+    },
+    governance: {
+      tenant: 'payments',
+      visibility: 'internal',
+      status: 'active',
+      accessText: 'support-agent, super-admin',
     },
   }
 }

@@ -23,12 +23,20 @@ export const MCP_TRANSPORTS: McpTransport[] = ['stdio', 'http', 'sse']
 export type McpAuthType = 'none' | 'bearer' | 'basic' | 'header'
 export const MCP_AUTH_TYPES: McpAuthType[] = ['none', 'bearer', 'basic', 'header']
 
+export interface Governance {
+  tenant?: string
+  visibility?: 'private' | 'internal' | 'public'
+  status?: string
+  access?: string[]
+}
+
 export interface Metadata {
   name: string
   version: string
   description?: string
   owner?: string
   labels?: Record<string, string>
+  governance?: Governance
 }
 
 export interface Capability {
