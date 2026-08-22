@@ -16,6 +16,7 @@ const NAV: NavItem[] = [
   { to: '/skill', label: 'Skill Designer', group: 'Design', live: true },
   { to: '/capability', label: 'Capability Designer', group: 'Design' },
   { to: '/playground', label: 'Playground', group: 'Test' },
+  { to: '/trace', label: 'Trace Explorer', group: 'Test' },
   { to: '/evaluation', label: 'Evaluation Studio', group: 'Test' },
   { to: '/gateway', label: 'Gateway Designer', group: 'Govern' },
   { to: '/security', label: 'Security Designer', group: 'Govern' },

@@ -5,6 +5,7 @@ import { SkillDesignerScreen } from './components/screens/SkillDesignerScreen'
 import { WorkloadDesigner } from './components/screens/WorkloadDesigner'
 import { CapabilityDesigner } from './components/screens/CapabilityDesigner'
 import { Playground } from './components/screens/Playground'
+import { TraceExplorer } from './components/screens/TraceExplorer'
 import { EvaluationStudio } from './components/screens/EvaluationStudio'
 import { GatewayDesigner } from './components/screens/GatewayDesigner'
 import { SecurityDesigner } from './components/screens/SecurityDesigner'
@@ -21,6 +22,7 @@ export default function App() {
         <Route path="/workload" element={<WorkloadDesigner />} />
         <Route path="/capability" element={<CapabilityDesigner />} />
         <Route path="/playground" element={<Playground />} />
+        <Route path="/trace" element={<TraceExplorer />} />
         <Route path="/evaluation" element={<EvaluationStudio />} />
         <Route path="/gateway" element={<GatewayDesigner />} />
         <Route path="/security" element={<SecurityDesigner />} />

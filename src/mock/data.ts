@@ -158,3 +158,55 @@ export const TENANTS: Tenant[] = [
   { name: 'acme-bank', environment: 'staging', workloads: 7 },
   { name: 'sandbox', environment: 'dev', workloads: 12 },
 ]
+
+// ---- execution trace (mirrors agent-core core.execution: ExecutionEvent/Trace) --------
+
+export type ExecEventType =
+  | 'TURN_STARTED'
+  | 'ROUTING_DECIDED'
+  | 'SKILL_SELECTED'
+  | 'GUARDRAIL_EVALUATED'
+  | 'LLM_CALL'
+  | 'TOOL_CALLED'
+  | 'TOOL_RESULT'
+  | 'MEMORY_READ'
+  | 'MEMORY_WRITE'
+  | 'HANDOFF'
+  | 'TURN_COMPLETED'
+  | 'ERROR'
+
+export interface ExecEventRow {
+  sequence: number
+  type: ExecEventType
+  phase?: string
+  message: string
+  attributes?: Record<string, string | number>
+  durationMs?: number
+  error?: string
+}
+
+export interface ExecTrace {
+  traceId: string
+  agentId: string
+  sessionId: string
+  events: ExecEventRow[]
+}
+
+export const SAMPLE_TRACE: ExecTrace = {
+  traceId: 'trace-6f2a9c',
+  agentId: 'customer-agent',
+  sessionId: 'sess-1183',
+  events: [
+    { sequence: 0, type: 'TURN_STARTED', message: 'User: "I want a refund for order 5567"' },
+    { sequence: 1, type: 'MEMORY_READ', phase: 'main', message: 'Loaded customer-history', attributes: { scope: 'customer-history', hits: 4 }, durationMs: 8 },
+    { sequence: 2, type: 'ROUTING_DECIDED', phase: 'routing', message: 'Routed to refund-skill', attributes: { method: 'SEMANTIC', confidence: 0.91 }, durationMs: 42 },
+    { sequence: 3, type: 'SKILL_SELECTED', message: 'refund-skill', attributes: { skill: 'refund-skill' } },
+    { sequence: 4, type: 'GUARDRAIL_EVALUATED', message: 'pii-input: PASS', attributes: { guardrail: 'pii-input', verdict: 'PASS' }, durationMs: 3 },
+    { sequence: 5, type: 'LLM_CALL', phase: 'main', message: 'gpt-4o', attributes: { provider: 'openai', model: 'gpt-4o', inputTokens: 812, outputTokens: 96 }, durationMs: 1240 },
+    { sequence: 6, type: 'TOOL_CALLED', message: 'refundPayment(order=5567)', attributes: { server: 'payments-api', tool: 'refundPayment' } },
+    { sequence: 7, type: 'TOOL_RESULT', message: 'refund accepted', attributes: { tool: 'refundPayment', status: 'ok', refundId: 'rf_88213' }, durationMs: 380 },
+    { sequence: 8, type: 'MEMORY_WRITE', phase: 'main', message: 'Recorded refund in episodic memory', attributes: { layer: 'EPISODIC' }, durationMs: 6 },
+    { sequence: 9, type: 'GUARDRAIL_EVALUATED', message: 'max-length: PASS', attributes: { guardrail: 'max-length', verdict: 'PASS' }, durationMs: 1 },
+    { sequence: 10, type: 'TURN_COMPLETED', message: 'Refund rf_88213 issued for order 5567.', attributes: { totalTokens: 908 }, durationMs: 1712 },
+  ],
+}

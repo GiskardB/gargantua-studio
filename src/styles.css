@@ -211,6 +211,10 @@ textarea { resize: vertical; }
 .trace-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
 .trace-ms { font-size: 11px; color: var(--fg-mute); font-family: var(--mono); }
 .trace-io { margin-top: 4px; }
+.trace-seq { font-family: var(--mono); font-size: 11px; color: var(--fg-mute); }
+.trace-phase { font-size: 11px; color: var(--fg-dim); font-style: italic; }
+.trace-msg { font-size: 13px; color: var(--fg); margin-top: 2px; }
+.trace-attrs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .trace-k { font-size: 10px; text-transform: uppercase; letter-spacing: .5px; color: var(--fg-mute); }
 
 /* ---- gateway intent tester ---- */
