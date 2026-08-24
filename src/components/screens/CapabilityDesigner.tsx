@@ -23,7 +23,7 @@ export function CapabilityDesigner() {
   return (
     <Screen
       title="Capability Designer"
-      subtitle="The external contracts callers route on, published to the Catalog — declared by the skills you assign in the Skill Designer, or by hand in the Agent Designer."
+      subtitle="The external contracts callers route on, published to the Catalog — derived from the skills you assign in the Skill Designer. This is the read-only Catalog view."
       actions={<Badge tone={isLive ? 'good' : 'neutral'}>{isLive ? 'live' : 'sample data'}</Badge>}
     >
       <div className="split-2">
