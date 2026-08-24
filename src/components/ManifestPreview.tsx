@@ -8,7 +8,17 @@ import type { AgentDraft } from '../types/draft'
 import { buildManifest as buildLocal } from '../lib/buildManifest'
 import { toYaml } from '../lib/toYaml'
 import { validateDraft } from '../lib/validate'
-import { buildManifest as buildRemote, OfflineError, publishDraft } from '../lib/api'
+import {
+  buildManifest as buildRemote,
+  OfflineError,
+  publishDraft,
+  skillsForDraft,
+  getLaunchCommand,
+  setLaunchCommand,
+  launchAgent,
+  type LaunchResult,
+} from '../lib/api'
+import { useSkillsStore } from '../store/skillsStore'
 import { CodeEditor } from './CodeEditor'
 
 interface Props {
@@ -30,6 +40,8 @@ export function ManifestPreview({ draft }: Props) {
   const [errors, setErrors] = useState<string[]>([])
   const [source, setSource] = useState<Source>('local')
   const [publishState, setPublishState] = useState<{ tone: string; text: string } | null>(null)
+  // Set once a publish succeeds, so the agent can then be launched by name@version.
+  const [published, setPublished] = useState<{ name: string; version: string } | null>(null)
   const seq = useRef(0)
 
   useEffect(() => {
@@ -70,12 +82,15 @@ export function ManifestPreview({ draft }: Props) {
 
   const publish = async () => {
     setPublishState({ tone: 'info', text: 'Publishing…' })
+    setPublished(null)
     try {
-      await publishDraft(draft)
+      const skills = skillsForDraft(draft, useSkillsStore.getState().skills.map((e) => e.draft))
+      await publishDraft(draft, skills)
       setPublishState({
         tone: 'good',
         text: `Published ${draft.metadata.name}@${draft.metadata.version}`,
       })
+      setPublished({ name: draft.metadata.name, version: draft.metadata.version })
     } catch (e) {
       const msg = e instanceof OfflineError ? 'Backend offline — cannot publish' : (e as Error).message
       setPublishState({ tone: 'bad', text: msg })
@@ -119,6 +134,8 @@ export function ManifestPreview({ draft }: Props) {
 
       {publishState && <div className={`publish-note ${publishState.tone}`}>{publishState.text}</div>}
 
+      {published && <LaunchPanel name={published.name} version={published.version} />}
+
       <div className="yaml-editor">
         <CodeEditor value={yaml} language="yaml" readOnly />
       </div>
@@ -127,6 +144,71 @@ export function ManifestPreview({ draft }: Props) {
         Built and validated by the Studio backend against the shared <code>agent-core</code>{' '}
         model. Schema: <code>gargantua.ai/v1</code>.
       </p>
+    </div>
+  )
+}
+
+// Shown after a successful publish: run the (editable) launch command for this bundle.
+// The command starts a Runtime pointed at the published bundle — see the backend's
+// LaunchService. Editing the template lets you swap docker for kubectl etc.
+function LaunchPanel({ name, version }: { name: string; version: string }) {
+  const [template, setTemplate] = useState('')
+  const [editing, setEditing] = useState(false)
+  const [state, setState] = useState<{ tone: string; text: string } | null>(null)
+  const [result, setResult] = useState<LaunchResult | null>(null)
+
+  useEffect(() => {
+    getLaunchCommand().then((r) => setTemplate(r.template)).catch(() => setTemplate(''))
+  }, [])
+
+  const saveTemplate = async () => {
+    try {
+      const r = await setLaunchCommand(template)
+      setTemplate(r.template)
+      setEditing(false)
+    } catch (e) {
+      setState({ tone: 'bad', text: (e as Error).message })
+    }
+  }
+
+  const launch = async () => {
+    setState({ tone: 'info', text: `Launching ${name}@${version}…` })
+    setResult(null)
+    try {
+      const r = await launchAgent(name, version)
+      setResult(r)
+      setState(
+        r.exitCode === 0
+          ? { tone: 'good', text: `Launched — exit ${r.exitCode}` }
+          : { tone: 'bad', text: `Launch failed — exit ${r.exitCode}` },
+      )
+    } catch (e) {
+      setState({ tone: 'bad', text: (e as Error).message })
+    }
+  }
+
+  return (
+    <div className="launch-panel">
+      <div className="launch-head">
+        <strong>Launch</strong>
+        <div className="launch-actions">
+          <button onClick={() => setEditing((e) => !e)}>{editing ? 'Cancel' : 'Edit command'}</button>
+          <button className="primary" onClick={launch}>Launch agent</button>
+        </div>
+      </div>
+      {editing ? (
+        <div className="launch-edit">
+          <textarea value={template} onChange={(e) => setTemplate(e.target.value)} rows={4} className="mono" />
+          <p className="field-hint">
+            {'{name}'} and {'{version}'} are substituted (validated). Swap for kubectl etc. without a code change.
+          </p>
+          <button className="primary" onClick={saveTemplate}>Save command</button>
+        </div>
+      ) : (
+        <pre className="code sm launch-cmd"><code>{template.replace('{name}', name).replace('{version}', version)}</code></pre>
+      )}
+      {state && <div className={`publish-note ${state.tone}`}>{state.text}</div>}
+      {result && <pre className="code sm launch-output"><code>{result.output || '(no output)'}</code></pre>}
     </div>
   )
 }

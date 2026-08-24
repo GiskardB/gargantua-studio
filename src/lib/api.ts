@@ -9,6 +9,19 @@
 import type { AgentDraft } from '../types/draft'
 import type { SkillDraft } from '../types/skillDraft'
 
+/** Skills the manifest actually references (by capability, default skill, or loadout). */
+export function skillsForDraft(draft: AgentDraft, skills: SkillDraft[]): SkillDraft[] {
+  const referenced = new Set<string>()
+  draft.capabilities.forEach((c) => c.implementedBy && referenced.add(c.implementedBy))
+  if (draft.defaultSkill) referenced.add(draft.defaultSkill)
+  draft.loadout.skillsText
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .forEach((s) => referenced.add(s))
+  return skills.filter((s) => s.name && referenced.has(s.name))
+}
+
 // When VITE_STUDIO_API is *defined* (including an empty string) we honour it; only an
 // entirely unset var falls back to the localhost dev default. Empty string means
 // same-origin/relative — the mode the Docker Compose deployment uses: nginx serves the
@@ -91,12 +104,107 @@ export function buildSkill(draft: SkillDraft): Promise<SkillBuildResult> {
   })
 }
 
-/** Build then publish to the Control Plane Registry via the backend. */
-export function publishDraft(draft: AgentDraft): Promise<unknown> {
+/**
+ * Build then publish to the Control Plane Registry via the backend. Skills the manifest
+ * references are sent alongside so the Control Plane can assemble a runnable bundle.
+ */
+export function publishDraft(draft: AgentDraft, skills: SkillDraft[] = []): Promise<unknown> {
   return request<unknown>('/api/studio/publish', {
     method: 'POST',
-    body: JSON.stringify(draft),
+    body: JSON.stringify({ ...draft, skills }),
   })
+}
+
+// ---- launch (start a published agent on a Runtime) --------------------------
+
+export interface LaunchResult {
+  exitCode: number
+  command: string
+  output: string
+}
+
+export function getLaunchCommand(): Promise<{ template: string }> {
+  return request<{ template: string }>('/api/studio/launch-command')
+}
+
+export function setLaunchCommand(template: string): Promise<{ template: string }> {
+  return request<{ template: string }>('/api/studio/launch-command', {
+    method: 'PUT',
+    body: JSON.stringify({ template }),
+  })
+}
+
+export function launchAgent(name: string, version: string): Promise<LaunchResult> {
+  return request<LaunchResult>('/api/studio/launch', {
+    method: 'POST',
+    body: JSON.stringify({ name, version }),
+  })
+}
+
+// ---- runtime (test a running agent directly) --------------------------------
+
+export interface RuntimeChatResponse {
+  text: string
+  sessionId: string
+  skillUsed: string
+  toolsCalled: string[]
+  routingMethod: string
+  routingConfidence: number
+  totalTokens: number
+  durationMs: number
+}
+
+/** Raised when a Runtime cannot be reached — distinct from the Studio backend being down. */
+export class RuntimeOfflineError extends Error {}
+
+async function runtimeRequest<T>(base: string, path: string, init?: RequestInit): Promise<T> {
+  const url = base.replace(/\/$/, '') + path
+  let res: Response
+  try {
+    res = await fetch(url, {
+      ...init,
+      headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
+    })
+  } catch {
+    throw new RuntimeOfflineError(`cannot reach the Runtime at ${base}`)
+  }
+  const text = await res.text()
+  const body = text ? JSON.parse(text) : null
+  if (!res.ok) {
+    throw new Error(`${res.status} ${body?.message ?? body?.error ?? res.statusText}`)
+  }
+  return body as T
+}
+
+export function runtimeChat(
+  base: string,
+  message: string,
+  userId: string,
+  sessionId: string,
+): Promise<RuntimeChatResponse> {
+  return runtimeRequest<RuntimeChatResponse>(base, '/api/agent/chat', {
+    method: 'POST',
+    headers: { 'X-User-Id': userId, 'X-Session-Id': sessionId },
+    body: JSON.stringify({ message }),
+  })
+}
+
+export interface RuntimeTrace {
+  traceId: string
+  agentId: string
+  sessionId: string
+  events: {
+    sequence: number
+    type: string
+    phase?: string
+    message: string
+    durationMs?: number
+    attributes?: Record<string, unknown>
+  }[]
+}
+
+export function runtimeTraces(base: string, limit = 20): Promise<RuntimeTrace[]> {
+  return runtimeRequest<RuntimeTrace[]>(base, `/api/traces?limit=${limit}`)
 }
 
 // ---- drafts -----------------------------------------------------------------
