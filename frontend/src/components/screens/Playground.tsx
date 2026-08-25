@@ -19,8 +19,11 @@ export function Playground() {
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  // Stable per-session ids so multi-turn memory works within a Playground session.
-  const ids = useRef({ user: 'studio-' + crypto.randomUUID().slice(0, 8), session: crypto.randomUUID() })
+  // Impersonation controls: set roles to test RBAC-gated skills (allowed-roles).
+  const [userId, setUserId] = useState('studio-' + crypto.randomUUID().slice(0, 8))
+  const [roles, setRoles] = useState('')
+  // Stable session id so multi-turn memory works within a Playground session.
+  const session = useRef(crypto.randomUUID())
 
   const send = async () => {
     const message = input.trim()
@@ -30,7 +33,7 @@ export function Playground() {
     setTurns((t) => [...t, { role: 'user', text: message }])
     setSending(true)
     try {
-      const res = await runtimeChat(runtimeUrl, message, ids.current.user, ids.current.session)
+      const res = await runtimeChat(runtimeUrl, message, userId, session.current, roles)
       setTurns((t) => [...t, { role: 'agent', text: res.text, meta: res }])
     } catch (e) {
       const msg = e instanceof RuntimeOfflineError ? `Runtime offline at ${runtimeUrl}` : (e as Error).message
@@ -48,11 +51,29 @@ export function Playground() {
         <div className="pg-controls">
           <input
             type="text"
+            value={userId}
+            onChange={(e) => setUserId(e.target.value)}
+            placeholder="user id"
+            className="mono"
+            style={{ width: 130 }}
+            title="X-User-Id sent to the runtime"
+          />
+          <input
+            type="text"
+            value={roles}
+            onChange={(e) => setRoles(e.target.value)}
+            placeholder="roles (for RBAC)"
+            className="mono"
+            style={{ width: 150 }}
+            title="X-User-Roles — comma-separated; needed to reach a skill with allowed-roles"
+          />
+          <input
+            type="text"
             value={runtimeUrl}
             onChange={(e) => setRuntimeUrl(e.target.value)}
             placeholder="http://localhost:18100"
             className="mono"
-            style={{ width: 240 }}
+            style={{ width: 220 }}
           />
         </div>
       }

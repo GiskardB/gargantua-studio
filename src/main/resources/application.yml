@@ -1,0 +1,47 @@
+server:
+  port: 8090
+
+spring:
+  application:
+    name: gargantua-studio-backend
+  # Durable, zero-infra default: an embedded H2 on the filesystem. AUTO_SERVER lets a
+  # second process (e.g. the H2 console) attach. Swap to Postgres with the `postgres`
+  # profile — the schema is portable, no code change.
+  datasource:
+    url: jdbc:h2:file:./data/db/studio;AUTO_SERVER=TRUE
+    username: sa
+    password: ""
+    driver-class-name: org.h2.Driver
+  sql:
+    init:
+      mode: always
+
+gargantua:
+  control-plane:
+    # The Control Plane this Studio serves. In Cave the two run side by side.
+    base-url: http://localhost:8080
+  launch:
+    # The command Studio runs to start a published agent. {name}/{version} are substituted
+    # (validated against ^[A-Za-z0-9._-]+$ first). Generic on purpose: swap for kubectl etc.
+    # without a code change. Editable at runtime via /api/studio/launch-command; the compose
+    # deployment overrides it via GARGANTUA_LAUNCH_COMMAND_TEMPLATE. This default is a plain
+    # `docker run` (works with a remote daemon — no compose file/build-context needed) against
+    # a pre-built `gargantua-runtime:local` image, recreating the runtime container pointed at
+    # the freshly published bundle.
+    command-template: >-
+      docker rm -f gargantua-runtime 2>/dev/null;
+      docker run -d --name gargantua-runtime --network gargantua-compose_default -p 18100:8080
+      -e GARGANTUA_BUNDLE_URL=http://control-plane:8080/api/v1/registry/bundles/{name}/{version}/bundle
+      -e SPRING_PROFILES_ACTIVE=embedded -e ROUTING_STRATEGY=semantic
+      -e LLM_PRIMARY_PROVIDER=openai -e LLM_PRIMARY_MODEL=qwen2.5:0.5b
+      -e LLM_PRIMARY_ENDPOINT=http://ollama:11434/v1 -e LLM_PRIMARY_API_KEY=ollama
+      -e AGENT_WEB_CORS_ALLOWED_ORIGINS=http://localhost:18081
+      gargantua-runtime:local
+    # Working directory the command runs in (unused by the docker-run default).
+    workdir: .
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

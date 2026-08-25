@@ -1,36 +1,46 @@
+/* Design tokens from the Stitch "Gargantua Studio Light" system: indigo primary,
+   cool-neutral surfaces, Space Grotesk headings + Inter body + JetBrains Mono code. */
 :root {
-  --bg: #ffffff;
-  --bg-2: #f7f8fa;
-  --bg-3: #eef1f5;
-  --line: #e2e6ec;
+  --bg: #ffffff;              /* elevated surface / cards */
+  --bg-2: #f9fafb;           /* app background floor */
+  --bg-3: #eef1f8;           /* subtle fills / chips */
+  --line: #e5e7eb;           /* structural borders */
   --line-2: #d3d9e2;
-  --fg: #1a2230;
-  --fg-dim: #67717f;
-  --fg-mute: #98a1ae;
-  --accent: #2f6fed;
-  --accent-soft: #e7effd;
-  --green: #12a06b;
-  --green-soft: #e3f6ee;
-  --amber: #b57708;
+  --fg: #111827;             /* text-main */
+  --fg-dim: #4b5563;         /* text-muted */
+  --fg-mute: #8b93a3;
+  --accent: #4f46e5;         /* indigo primary */
+  --accent-strong: #3525cd;
+  --accent-2: #6d5cf0;
+  --accent-soft: #eef0fe;    /* indigo-tinted hover/active bg */
+  --green: #0f9e6e;
+  --green-soft: #e4f7ef;
+  --amber: #b5730a;
   --amber-soft: #fbf1dc;
-  --red: #d23b3b;
-  --red-soft: #fbe6e6;
-  --info: #6b57d6;
-  --info-soft: #ece8fb;
-  --accent-2: #6f5bea;
-  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
-  --shadow: 0 1px 2px rgba(20, 30, 50, 0.04), 0 2px 8px rgba(20, 30, 50, 0.04);
-  --shadow-lg: 0 4px 10px rgba(20, 30, 50, 0.06), 0 2px 4px rgba(20, 30, 50, 0.05);
+  --red: #dc2626;
+  --red-soft: #fdeaea;
+  --info: #0284c7;
+  --info-soft: #e2f2fd;
+  --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --display: "Space Grotesk", var(--sans);
+  --shadow: 0 1px 2px rgba(17, 24, 39, 0.04), 0 1px 3px rgba(17, 24, 39, 0.06);
+  --shadow-lg: 0 1px 3px rgba(17, 24, 39, 0.05), 0 10px 15px -3px rgba(17, 24, 39, 0.08);
+  /* dark surface for the manifest/code preview panel */
+  --code-bg: #171923;
+  --code-fg: #e6e8f0;
+  --code-line: #2a2e3d;
 }
 
 * { box-sizing: border-box; }
 html, body, #root { height: 100%; margin: 0; }
 body {
-  background: radial-gradient(1200px 500px at 15% -10%, #f2f6ff 0%, var(--bg-2) 45%);
+  background: var(--bg-2);
   color: var(--fg);
-  font: 14px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font: 14px/1.5 var(--sans);
   -webkit-font-smoothing: antialiased;
 }
+h1, h2, h3, .brand { font-family: var(--display); }
 
 .app { display: flex; flex-direction: column; height: 100vh; }
 
@@ -276,10 +286,10 @@ textarea { resize: vertical; }
 .chip { padding: 6px 14px; border-radius: 999px; border: 1px solid var(--line-2); background: var(--bg); color: var(--fg-dim); cursor: pointer; font-family: var(--mono); font-size: 12px; }
 .chip.on { color: #fff; background: var(--green); border-color: var(--green); font-weight: 600; }
 
-/* ---- manifest preview ---- */
-.preview { display: flex; flex-direction: column; height: 100%; min-height: 0; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow); overflow: hidden; }
-.preview-head { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; border-bottom: 1px solid var(--line); background: var(--bg-2); }
-.preview-head h2 { margin: 0; font-size: 13px; font-family: var(--mono); }
+/* ---- manifest preview (dark code panel, per the Stitch design) ---- */
+.preview { display: flex; flex-direction: column; height: 100%; min-height: 0; background: var(--code-bg); border: 1px solid var(--code-line); border-radius: 12px; box-shadow: var(--shadow-lg); overflow: hidden; }
+.preview-head { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; border-bottom: 1px solid var(--code-line); background: #1c1f2b; }
+.preview-head h2 { margin: 0; font-size: 13px; font-family: var(--mono); color: #aab2c5; }
 .preview-actions { display: flex; align-items: center; gap: 8px; }
 .badge { font-size: 11px; padding: 2px 9px; border-radius: 999px; font-weight: 600; }
 .badge.good { color: var(--green); background: var(--green-soft); }
@@ -295,6 +305,15 @@ textarea { resize: vertical; }
 .yaml code { font-family: var(--mono); font-size: 12.5px; color: var(--fg); white-space: pre; }
 .preview-foot { margin: 0; padding: 8px 14px; border-top: 1px solid var(--line); font-size: 11px; color: var(--fg-dim); background: var(--bg-2); }
 .preview-foot code { font-family: var(--mono); color: var(--green); }
+
+/* dark-panel children (issues bar, footer, launch, badges live inside the dark .preview) */
+.preview .issues { background: #1c1f2b; border-bottom-color: var(--code-line); }
+.preview .issue-msg { color: #c2c8d6; }
+.preview .preview-foot { background: #1c1f2b; border-top-color: var(--code-line); color: #8b93a5; }
+.preview .badge.neutral { color: #c2c8d6; background: #2a2e3d; }
+.preview .preview-head button { background: transparent; color: #c2c8d6; border-color: var(--code-line); }
+.preview .preview-head button:hover:not(:disabled) { border-color: var(--accent-2); color: #fff; }
+.preview .preview-head button.primary { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff; border-color: transparent; }
 
 @media (max-width: 1200px) {
   .agent-split { grid-template-columns: 1fr; }
@@ -328,15 +347,20 @@ textarea { resize: vertical; }
 /* React Flow agent graph fills the editor pane */
 .agent-graph { height: calc(100vh - 52px - 55px - 40px); min-height: 420px; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--bg); box-shadow: var(--shadow); }
 
-/* launch panel under the manifest preview, after a successful publish */
-.launch-panel { border-top: 1px solid var(--line); background: var(--bg-2); padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+/* launch panel under the manifest preview (dark, sits inside the dark preview) */
+.launch-panel { border-top: 1px solid var(--code-line); background: #1c1f2b; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
 .launch-head { display: flex; align-items: center; justify-content: space-between; }
-.launch-head strong { font-size: 12px; text-transform: uppercase; letter-spacing: .5px; color: var(--fg); }
+.launch-head strong { font-size: 12px; text-transform: uppercase; letter-spacing: .5px; color: #e6e8f0; font-family: var(--display); }
 .launch-actions { display: flex; gap: 8px; }
+.launch-panel button { background: transparent; color: #c2c8d6; border-color: var(--code-line); }
+.launch-panel button:hover:not(:disabled) { border-color: var(--accent-2); color: #fff; }
+.launch-panel button.primary { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff; border-color: transparent; }
 .launch-edit { display: flex; flex-direction: column; gap: 6px; }
-.launch-edit textarea { font-size: 11.5px; }
-.launch-cmd { margin: 0; white-space: pre-wrap; word-break: break-all; }
-.launch-output { margin: 0; max-height: 200px; }
+.launch-edit textarea { font-size: 11.5px; background: #12141d; color: #e6e8f0; border-color: var(--code-line); }
+.launch-edit .field-hint { color: #8b93a5; }
+.launch-cmd { margin: 0; white-space: pre-wrap; word-break: break-all; background: #12141d; border-color: var(--code-line); }
+.launch-cmd code, .launch-output code { color: #c2c8d6; }
+.launch-output { margin: 0; max-height: 200px; background: #12141d; border-color: var(--code-line); }
 
 /* publish result note under the preview header */
 .publish-note { font-size: 12px; padding: 8px 14px; border-bottom: 1px solid var(--line); }

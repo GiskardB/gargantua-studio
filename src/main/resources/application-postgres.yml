@@ -1,0 +1,6 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://${POSTGRES_HOST:postgres}:5432/${POSTGRES_DB:gargantua}
+    username: ${POSTGRES_USER:gargantua}
+    password: ${POSTGRES_PASSWORD:gargantua}
+    driver-class-name: org.postgresql.Driver

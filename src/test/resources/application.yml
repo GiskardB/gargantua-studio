@@ -1,0 +1,19 @@
+server:
+  port: 0
+
+spring:
+  datasource:
+    url: jdbc:h2:mem:studio;DB_CLOSE_DELAY=-1
+    username: sa
+    password: ""
+    driver-class-name: org.h2.Driver
+  sql:
+    init:
+      mode: always
+
+gargantua:
+  control-plane:
+    base-url: http://localhost:8080
+  launch:
+    command-template: "echo launch {name} {version}"
+    workdir: .

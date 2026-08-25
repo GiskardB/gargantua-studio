@@ -27,9 +27,12 @@ export function skillsForDraft(draft: AgentDraft, skills: SkillDraft[]): SkillDr
 // same-origin/relative — the mode the Docker Compose deployment uses: nginx serves the
 // SPA and reverse-proxies /api and /actuator to the backend, so the browser needs no
 // absolute URL and the app works regardless of host (localhost or a LAN IP like Cave's).
+// Same origin by default: the backend serves this SPA and exposes /api on the same host
+// (dev proxies /api → :8090, see vite.config). Override with VITE_STUDIO_API only for an
+// unusual split deployment.
 const configuredBase = import.meta.env.VITE_STUDIO_API as string | undefined
 const BASE: string =
-  configuredBase !== undefined ? configuredBase.replace(/\/$/, '') : 'http://localhost:8090'
+  configuredBase !== undefined ? configuredBase.replace(/\/$/, '') : ''
 
 export const apiBaseUrl = BASE
 
@@ -181,10 +184,13 @@ export function runtimeChat(
   message: string,
   userId: string,
   sessionId: string,
+  roles = '',
 ): Promise<RuntimeChatResponse> {
+  const headers: Record<string, string> = { 'X-User-Id': userId, 'X-Session-Id': sessionId }
+  if (roles.trim()) headers['X-User-Roles'] = roles.trim()
   return runtimeRequest<RuntimeChatResponse>(base, '/api/agent/chat', {
     method: 'POST',
-    headers: { 'X-User-Id': userId, 'X-Session-Id': sessionId },
+    headers,
     body: JSON.stringify({ message }),
   })
 }

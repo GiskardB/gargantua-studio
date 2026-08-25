@@ -13,26 +13,29 @@ interface Props {
   onChange?: (value: string) => void
   readOnly?: boolean
   height?: string | number
+  /** Dark theme for the manifest preview panel (premium code-editor look). */
+  dark?: boolean
 }
 
-export function CodeEditor({ value, language, onChange, readOnly, height = '100%' }: Props) {
+export function CodeEditor({ value, language, onChange, readOnly, height = '100%', dark }: Props) {
   return (
     <Editor
       height={height}
       language={language}
       value={value}
-      theme="vs"
+      theme={dark ? 'vs-dark' : 'vs'}
       loading={<div className="editor-loading">loading editor…</div>}
       onChange={(v) => onChange?.(v ?? '')}
       options={{
         readOnly: !!readOnly,
         minimap: { enabled: false },
-        fontSize: 12,
+        fontSize: 12.5,
+        fontFamily: '"JetBrains Mono", ui-monospace, Menlo, Consolas, monospace',
         lineNumbers: 'on',
         scrollBeyondLastLine: false,
         wordWrap: 'on',
         automaticLayout: true,
-        padding: { top: 10, bottom: 10 },
+        padding: { top: 12, bottom: 12 },
         renderLineHighlight: readOnly ? 'none' : 'line',
         scrollbar: { alwaysConsumeMouseWheel: false },
       }}

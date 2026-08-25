@@ -137,7 +137,7 @@ export function ManifestPreview({ draft }: Props) {
       {published && <LaunchPanel name={published.name} version={published.version} />}
 
       <div className="yaml-editor">
-        <CodeEditor value={yaml} language="yaml" readOnly />
+        <CodeEditor value={yaml} language="yaml" readOnly dark />
       </div>
 
       <p className="preview-foot">

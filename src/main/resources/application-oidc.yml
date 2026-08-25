@@ -1,0 +1,7 @@
+spring:
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # Point at the Gargantua realm. In Cave, Keycloak is reachable as `keycloak`.
+          issuer-uri: ${OIDC_ISSUER_URI:http://keycloak:8080/realms/gargantua}
