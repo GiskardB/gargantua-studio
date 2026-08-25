@@ -1,8 +1,8 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { AgentDesigner } from '../AgentDesigner'
 import { AgentGraph } from '../AgentGraph'
 import { ManifestPreview } from '../ManifestPreview'
-import { Screen } from '../ui'
+import { Screen, Badge } from '../ui'
 import { useDraftStore } from '../../store/draftStore'
 
 type Tab = 'form' | 'graph'
@@ -15,11 +15,71 @@ export function AgentDesignerScreen() {
   const setDraft = useDraftStore((s) => s.setDraft)
   const loadSample = useDraftStore((s) => s.loadSample)
   const clear = useDraftStore((s) => s.clear)
+
+  // Track whether the form is open (starts closed — user picks "New" or "Load sample")
+  const [formOpen, setFormOpen] = useState(false)
   const [tab, setTab] = useState<Tab>('form')
 
+  // Support loading an existing workload for editing: ?workload=name:version in URL
+  const [editingWorkload, setEditingWorkload] = useState<string | null>(null)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const workload = params.get('workload')
+    if (workload) {
+      setEditingWorkload(workload)
+      setFormOpen(true)
+    }
+  }, [])
+
+  const startNew = () => {
+    clear()
+    setFormOpen(true)
+  }
+
+  // Landing state: no form open, no editing workload
+  if (!formOpen && !editingWorkload) {
+    return (
+      <Screen
+        title="Agent Designer"
+        subtitle="Author an agent declaratively — the output is a valid gargantua.ai/v1 manifest."
+        actions={
+          <>
+            <button className="primary" onClick={startNew}>+ New Agent</button>
+            <button onClick={() => { loadSample(); setFormOpen(true) }} style={{ marginLeft: 8 }}>
+              Load sample
+            </button>
+          </>
+        }
+      >
+        <div className="agent-split">
+          <div className="agent-editor">
+            <div className="welcome-state">
+              <div className="welcome-icon">▰▰</div>
+              <h2>Create your first agent</h2>
+              <p>Start from scratch or load a sample to see how it works.</p>
+              <div className="welcome-actions">
+                <button className="primary" onClick={startNew}>+ New Agent</button>
+                <button onClick={() => { loadSample(); setFormOpen(true) }} style={{ marginLeft: 12 }}>
+                  Load sample
+                </button>
+              </div>
+              <div className="welcome-hint">
+                <p>Or go to <strong>Workload Designer</strong> to see published agents and click one to edit it.</p>
+              </div>
+            </div>
+          </div>
+          <div className="agent-preview">
+            <ManifestPreview draft={draft} />
+          </div>
+        </div>
+      </Screen>
+    )
+  }
+
+  // Form open (new, sample, or editing existing)
   return (
     <Screen
-      title="Agent Designer"
+      title={editingWorkload ? `Editing: ${editingWorkload}` : 'Agent Designer'}
       subtitle="Author an agent declaratively — the output is a valid gargantua.ai/v1 manifest."
       actions={
         <>
@@ -31,11 +91,15 @@ export function AgentDesignerScreen() {
               Graph
             </button>
           </div>
-          <button onClick={loadSample}>Load sample</button>
           <button onClick={clear}>Clear</button>
         </>
       }
     >
+      {editingWorkload && (
+        <div style={{ marginBottom: 12 }}>
+          <Badge tone="neutral">Editing: {editingWorkload}</Badge>
+        </div>
+      )}
       <div className="agent-split">
         <div className="agent-editor">
           {tab === 'form' ? (

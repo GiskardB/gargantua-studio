@@ -1,6 +1,7 @@
-import { useRef, useState } from 'react'
-import { Screen, Panel } from '../ui'
+import { useRef, useState, useEffect } from 'react'
+import { Screen, Panel, Badge } from '../ui'
 import { useRuntimeStore } from '../../store/runtimeStore'
+import { usePlatformStore } from '../../store/platformStore'
 import { runtimeChat, RuntimeOfflineError, type RuntimeChatResponse } from '../../lib/api'
 
 interface Turn {
@@ -15,6 +16,10 @@ interface Turn {
 export function Playground() {
   const runtimeUrl = useRuntimeStore((s) => s.runtimeUrl)
   const setRuntimeUrl = useRuntimeStore((s) => s.setRuntimeUrl)
+  const { workloads } = usePlatformStore((s) => ({
+    workloads: s.workloads,
+  }))
+  const [selectedWorkload, setSelectedWorkload] = useState<string>('')
   const [turns, setTurns] = useState<Turn[]>([])
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
@@ -24,6 +29,13 @@ export function Playground() {
   const [roles, setRoles] = useState('')
   // Stable session id so multi-turn memory works within a Playground session.
   const session = useRef(crypto.randomUUID())
+
+  // Auto-populate runtime URL when a workload is selected and URL is empty/default
+  useEffect(() => {
+    if (selectedWorkload && !runtimeUrl) {
+      setRuntimeUrl('http://localhost:18100')
+    }
+  }, [selectedWorkload, runtimeUrl, setRuntimeUrl])
 
   const send = async () => {
     const message = input.trim()
@@ -48,34 +60,56 @@ export function Playground() {
       title="Playground"
       subtitle="Test a conversation against a running Runtime. Set the Runtime URL, then chat — responses show the real skill, routing method and token counts."
       actions={
-        <div className="pg-controls">
-          <input
-            type="text"
-            value={userId}
-            onChange={(e) => setUserId(e.target.value)}
-            placeholder="user id"
-            className="mono"
-            style={{ width: 130 }}
-            title="X-User-Id sent to the runtime"
-          />
-          <input
-            type="text"
-            value={roles}
-            onChange={(e) => setRoles(e.target.value)}
-            placeholder="roles (for RBAC)"
-            className="mono"
-            style={{ width: 150 }}
-            title="X-User-Roles — comma-separated; needed to reach a skill with allowed-roles"
-          />
-          <input
-            type="text"
-            value={runtimeUrl}
-            onChange={(e) => setRuntimeUrl(e.target.value)}
-            placeholder="http://localhost:18100"
-            className="mono"
-            style={{ width: 220 }}
-          />
-        </div>
+        <>
+          <div className="pg-controls">
+            <select
+              value={selectedWorkload}
+              onChange={(e) => setSelectedWorkload(e.target.value)}
+              className="mono"
+              style={{ width: 200, marginRight: 12 }}
+            >
+              <option value="">— Select workload —</option>
+              {workloads?.map((w) => (
+                <option key={`${w.name}:${w.version}`} value={`${w.name}:${w.version}`}>
+                  {w.name} ({w.kind}) v{w.version}
+                </option>
+              ))}
+            </select>
+            {selectedWorkload && (
+              <div style={{ marginLeft: 12, display: 'inline-block' }}>
+                <Badge tone="neutral">Testing: {selectedWorkload.split(':')[0]}</Badge>
+              </div>
+            )}
+          </div>
+          <div className="pg-controls">
+            <input
+              type="text"
+              value={userId}
+              onChange={(e) => setUserId(e.target.value)}
+              placeholder="user id"
+              className="mono"
+              style={{ width: 130 }}
+              title="X-User-Id sent to the runtime"
+            />
+            <input
+              type="text"
+              value={roles}
+              onChange={(e) => setRoles(e.target.value)}
+              placeholder="roles (for RBAC)"
+              className="mono"
+              style={{ width: 150 }}
+              title="X-User-Roles — comma-separated; needed to reach a skill with allowed-roles"
+            />
+            <input
+              type="text"
+              value={runtimeUrl}
+              onChange={(e) => setRuntimeUrl(e.target.value)}
+              placeholder="http://localhost:18100"
+              className="mono"
+              style={{ width: 220 }}
+            />
+          </div>
+        </>
       }
     >
       <Panel title="Conversation">

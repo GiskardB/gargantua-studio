@@ -39,7 +39,7 @@ export function WorkloadDesigner() {
       actions={
         <>
           <Badge tone={isLive ? 'good' : 'neutral'}>{isLive ? 'live' : 'sample data'}</Badge>
-          <button className="primary">+ New workload</button>
+          <button className="primary" onClick={() => window.location.href = '/agent'}>+ New workload</button>
         </>
       }
     >
@@ -48,7 +48,11 @@ export function WorkloadDesigner() {
       ) : (
         <div className="cardgrid">
           {workloads.map((w) => (
-            <div className="wl-card" key={`${w.name}:${w.version}`}>
+            <div
+              className="wl-card"
+              key={`${w.name}:${w.version}`}
+              onClick={() => window.location.href = `/agent?workload=${encodeURIComponent(w.name)}:${w.version}`}
+            >
               <div className="wl-top">
                 <Badge tone={KIND_TONE[w.kind]}>{w.kind}</Badge>
                 <span className="wl-health">

@@ -33,7 +33,7 @@ function capabilityFromSkill(skill: SkillDraft): CapabilityDraft {
 }
 
 export const useDraftStore = create<DraftState>((set, get) => ({
-  draft: sampleDraft(),
+  draft: emptyDraft(),
   setDraft: (draft) => set({ draft }),
   loadSample: () => set({ draft: sampleDraft() }),
   clear: () => set({ draft: emptyDraft() }),

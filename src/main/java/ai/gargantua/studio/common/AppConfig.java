@@ -9,6 +9,8 @@ import java.time.Clock;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
+import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 import org.springframework.web.client.RestClient;
 
 /**
@@ -48,4 +50,17 @@ public class AppConfig {
             @Value("${gargantua.control-plane.base-url:http://localhost:8080}") String baseUrl) {
         return RestClient.builder().baseUrl(baseUrl).build();
     }
+
+    @Bean
+    public WebMvcConfigurer staticResources() {
+        return new WebMvcConfigurer() {
+            @Override
+            public void addResourceHandlers(ResourceHandlerRegistry registry) {
+                registry.addResourceHandler("/**")
+                        .addResourceLocations("classpath:/static/")
+                        .resourceChain(true);
+            }
+        };
+    }
+
 }
