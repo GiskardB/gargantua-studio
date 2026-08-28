@@ -30,36 +30,6 @@ export const WORKLOADS: WorkloadRow[] = [
   { name: 'nightly-reconcile', kind: 'BATCH_JOB', version: '1.0.0', owner: 'finance', state: 'stopped', health: 'offline', capabilities: 0, updated: '2w ago' },
 ]
 
-export interface CapabilityRow {
-  name: string
-  version: string
-  description: string
-  implementedBy: string[]
-  tags: string[]
-  health: Health
-  callsPerDay: number
-}
-
-export const CAPABILITIES: CapabilityRow[] = [
-  { name: 'refund-payment', version: '1.0.0', description: 'Handles a payment refund request end to end.', implementedBy: ['customer-agent:1.2.0'], tags: ['payments', 'gdpr'], health: 'healthy', callsPerDay: 4210 },
-  { name: 'payment-status', version: '1.1.0', description: 'Reports the current status of a payment.', implementedBy: ['customer-agent:1.2.0', 'invoice-summariser:1.1.2'], tags: ['payments'], health: 'healthy', callsPerDay: 9800 },
-  { name: 'dispute-transaction', version: '2.0.0', description: 'Opens a fraud dispute for a suspicious charge.', implementedBy: ['fraud-agent:0.9.1'], tags: ['payments', 'fraud'], health: 'degraded', callsPerDay: 1330 },
-  { name: 'assess-risk-score', version: '1.0.2', description: 'Returns a 0–100 risk score for a transaction.', implementedBy: ['fraud-agent:0.9.1'], tags: ['fraud', 'ml'], health: 'healthy', callsPerDay: 15600 },
-  { name: 'classify-intent', version: '1.0.4', description: 'Maps free text to a routing intent.', implementedBy: ['intent-classifier:1.0.4'], tags: ['nlp', 'routing'], health: 'healthy', callsPerDay: 42000 },
-  { name: 'summarise-invoice', version: '1.1.0', description: 'Produces a short summary of an invoice PDF.', implementedBy: ['invoice-summariser:1.1.2'], tags: ['finance', 'rag'], health: 'healthy', callsPerDay: 620 },
-]
-
-export const CAPABILITY_SCHEMA_SAMPLE = `{
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "type": "object",
-  "properties": {
-    "paymentId": { "type": "string", "description": "Payment to refund" },
-    "amount":    { "type": "number", "minimum": 0 },
-    "reason":    { "type": "string" }
-  },
-  "required": ["paymentId"]
-}`
-
 export interface ChatTurn {
   role: 'user' | 'agent'
   text: string

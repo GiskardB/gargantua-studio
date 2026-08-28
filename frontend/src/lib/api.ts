@@ -82,6 +82,16 @@ export async function checkHealth(): Promise<boolean> {
   }
 }
 
+/** Control Plane's liveness, relayed through the Studio backend — distinct from `checkHealth`. */
+export async function checkControlPlaneHealth(): Promise<boolean> {
+  try {
+    const res = await fetch(BASE + '/api/studio/control-plane/health')
+    return res.ok
+  } catch {
+    return false
+  }
+}
+
 // ---- manifest ---------------------------------------------------------------
 
 export function buildManifest(draft: AgentDraft): Promise<BuildResult> {
@@ -89,6 +99,46 @@ export function buildManifest(draft: AgentDraft): Promise<BuildResult> {
     method: 'POST',
     body: JSON.stringify(draft),
   })
+}
+
+/**
+ * Fetch a published workload's manifest, already turned into a form draft by the
+ * backend (the exact inverse of what publish sends). Throws (via `request`) on a 404
+ * — the caller decides how to surface "that version doesn't exist".
+ */
+export function getWorkloadDraft(name: string, version: string): Promise<AgentDraft> {
+  return request<AgentDraft>(
+    `/api/studio/workloads/${encodeURIComponent(name)}/${encodeURIComponent(version)}/draft`,
+  )
+}
+
+/**
+ * Builds the exact .gbundle the Control Plane would assemble on publish, entirely
+ * locally — no Control Plane involved. Returns the raw bytes and the server-suggested
+ * filename; the caller triggers the browser download. Throws with the validation
+ * errors joined into the message on a 400.
+ */
+export async function downloadBundle(
+  draft: AgentDraft,
+  skills: SkillDraft[] = [],
+): Promise<{ blob: Blob; filename: string }> {
+  let res: Response
+  try {
+    res = await fetch(BASE + '/api/studio/bundle', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...draft, skills }),
+    })
+  } catch {
+    throw new OfflineError(`cannot reach Studio backend at ${BASE}`)
+  }
+  if (!res.ok) {
+    const body = await res.json().catch(() => null)
+    throw new Error(body?.errors?.join('; ') ?? body?.message ?? res.statusText)
+  }
+  const disposition = res.headers.get('Content-Disposition') ?? ''
+  const filename = /filename="([^"]+)"/.exec(disposition)?.[1] ?? `${draft.metadata.name || 'agent'}.gbundle`
+  return { blob: await res.blob(), filename }
 }
 
 // ---- skill --------------------------------------------------------------------
@@ -105,6 +155,44 @@ export function buildSkill(draft: SkillDraft): Promise<SkillBuildResult> {
     method: 'POST',
     body: JSON.stringify(draft),
   })
+}
+
+export interface SavedSkill {
+  id: string
+  name: string | null
+  version: string | null
+  updatedAt: string
+  draft: SkillDraft
+}
+
+/** Durable skill drafts (a skill is still not published — this is editing state only). */
+export function listSkills(): Promise<SavedSkill[]> {
+  return request<SavedSkill[]>('/api/studio/skills')
+}
+
+export function createSkill(draft: SkillDraft): Promise<SavedSkill> {
+  return request<SavedSkill>('/api/studio/skills', {
+    method: 'POST',
+    body: JSON.stringify(draft),
+  })
+}
+
+export function updateSkill(id: string, draft: SkillDraft): Promise<SavedSkill> {
+  return request<SavedSkill>(`/api/studio/skills/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    body: JSON.stringify(draft),
+  })
+}
+
+/** Copies a skill server-side under a new id (name gets a "-copy" suffix). */
+export function duplicateSkill(id: string): Promise<SavedSkill> {
+  return request<SavedSkill>(`/api/studio/skills/${encodeURIComponent(id)}/duplicate`, {
+    method: 'POST',
+  })
+}
+
+export function deleteSkill(id: string): Promise<void> {
+  return request<void>(`/api/studio/skills/${encodeURIComponent(id)}`, { method: 'DELETE' })
 }
 
 /**
@@ -232,14 +320,17 @@ export function getWorkloads(): Promise<unknown[]> {
   return request<unknown[]>('/api/studio/workloads')
 }
 
-export function getCapabilities(): Promise<unknown[]> {
-  return request<unknown[]>('/api/studio/capabilities')
-}
-
 export function getPolicies(): Promise<unknown[]> {
   return request<unknown[]>('/api/studio/policies')
 }
 
 export function getDeployments(): Promise<unknown[]> {
   return request<unknown[]>('/api/studio/deployments')
+}
+
+/** Delete a published workload version. Rejects (409, via the thrown Error) if still deployed. */
+export function deleteWorkload(name: string, version: string): Promise<void> {
+  return request<void>(`/api/studio/workloads/${encodeURIComponent(name)}/${encodeURIComponent(version)}`, {
+    method: 'DELETE',
+  })
 }

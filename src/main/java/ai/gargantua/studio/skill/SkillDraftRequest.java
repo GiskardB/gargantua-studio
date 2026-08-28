@@ -31,9 +31,33 @@ public record SkillDraftRequest(
         String ragMinScore,
         String allowedRolesText,
         List<String> memoryLayers,
-        String systemPrompt) {
+        String systemPrompt,
+        List<ReferenceFile> referenceFiles) {
 
     public SkillDraftRequest {
         memoryLayers = memoryLayers == null ? List.of() : memoryLayers;
+        referenceFiles = referenceFiles == null ? List.of() : referenceFiles;
+    }
+
+    /** Back-compat overload for callers that predate the {@code referenceFiles} field. */
+    public SkillDraftRequest(
+            String name, String description, String version, String allowedToolsText,
+            String referencesText, String examplesText, boolean active, String domain,
+            String outputSchema, String maxTokens, String temperature, String preferredModel,
+            String knowledgeBase, String ragMaxResults, String ragMinScore, String allowedRolesText,
+            List<String> memoryLayers, String systemPrompt) {
+        this(name, description, version, allowedToolsText, referencesText, examplesText, active,
+                domain, outputSchema, maxTokens, temperature, preferredModel, knowledgeBase,
+                ragMaxResults, ragMinScore, allowedRolesText, memoryLayers, systemPrompt, List.of());
+    }
+
+    /**
+     * A text file shipped alongside SKILL.md at {@code skills/<name>/references/<name>}
+     * in the bundle. The Runtime's {@code FilesystemSkillRegistry} reads every file under
+     * that folder and appends its content to the skill's references — this is the only
+     * way to ship supporting documents the frontmatter {@code references:} list (opaque
+     * strings) cannot carry.
+     */
+    public record ReferenceFile(String name, String content) {
     }
 }

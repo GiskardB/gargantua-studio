@@ -256,8 +256,16 @@ textarea { resize: vertical; }
 
 /* ---- agent designer screen ---- */
 .agent-split { display: grid; grid-template-columns: 1fr 460px; gap: 18px; align-items: start; }
+.agent-split.preview-collapsed { grid-template-columns: 1fr auto; }
 .agent-editor { min-width: 0; }
 .agent-preview { position: sticky; top: 0; height: calc(100vh - 52px - 55px - 40px); }
+.preview-collapsed-rail { position: sticky; top: 0; display: flex; align-items: flex-start; padding-top: 4px; }
+.preview-collapse-toggle {
+  writing-mode: vertical-rl; padding: 10px 6px; border-radius: 8px;
+  background: var(--bg-3); color: var(--fg-dim); border: 1px solid var(--line);
+}
+.preview-collapse-toggle:hover { color: var(--fg); border-color: var(--line-2); }
+.preview-collapse-row { display: flex; justify-content: flex-end; margin-bottom: 6px; }
 
 /* designer form (reused from AgentDesigner) */
 .designer { display: flex; flex-direction: column; }
@@ -275,6 +283,10 @@ textarea { resize: vertical; }
 .field-hint { font-size: 11px; color: var(--fg-mute); }
 .checkbox { display: flex; align-items: center; gap: 8px; font-size: 13px; }
 .checkbox input { width: auto; }
+.ref-upload { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.ref-file-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; width: 100%; }
+.ref-file-item { display: flex; align-items: center; gap: 10px; font-size: 12px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg-2); }
+.ref-file-item span:first-child { flex: 1; }
 .card { border: 1px solid var(--line); border-radius: 8px; padding: 12px; background: var(--bg-2); display: flex; flex-direction: column; gap: 12px; }
 .card-head { display: flex; align-items: center; justify-content: space-between; }
 .card-head strong { font-size: 12px; color: var(--accent); }
@@ -345,6 +357,8 @@ textarea { resize: vertical; }
 .schema-editor { height: 220px; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; margin-top: 6px; }
 
 /* React Flow agent graph fills the editor pane */
+.agent-graph-wrap { display: flex; flex-direction: column; gap: 8px; }
+.agent-graph-hint { font-size: 12px; color: var(--fg-dim); }
 .agent-graph { height: calc(100vh - 52px - 55px - 40px); min-height: 420px; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--bg); box-shadow: var(--shadow); }
 
 /* launch panel under the manifest preview (dark, sits inside the dark preview) */
@@ -371,6 +385,138 @@ textarea { resize: vertical; }
 /* empty state for live-but-nothing-published screens */
 .empty { padding: 40px; text-align: center; color: var(--fg-dim); border: 1px dashed var(--line-2); border-radius: 10px; background: var(--bg-2); }
 
+/* agent graph detail panel */
+.graph-detail-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+.graph-detail {
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: var(--shadow-xl);
+  width: 420px;
+  max-height: 80vh;
+  overflow: auto;
+  padding: 24px;
+}
+.graph-detail-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+.graph-detail-kind {
+  font-size: 14px;
+  font-weight: 600;
+  color: #667;
+}
+.graph-detail-name {
+  font-size: 18px;
+  font-weight: 700;
+  color: #1a2233;
+  margin-top: 4px;
+}
+.graph-detail-body {
+  margin-top: 16px;
+}
+.graph-detail .field {
+  margin-bottom: 16px;
+}
+.graph-detail .field-label {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 6px;
+  display: block;
+}
+.graph-detail .chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+.graph-detail .chip {
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.graph-detail .chip:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+.graph-detail .chip.on {
+  background: var(--accent);
+  color: white;
+}
+
+/* publish dialog */
+.publish-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+.publish-dialog {
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: var(--shadow-xl);
+  width: 480px;
+  max-height: 85vh;
+  overflow: auto;
+  padding: 32px;
+}
+.publish-dialog-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+}
+.publish-dialog-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: #1a2233;
+}
+.publish-dialog-close {
+  background: transparent;
+  border: none;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  color: #999;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+.publish-dialog-close:hover {
+  background: rgba(0, 0, 0, 0.04);
+  color: #333;
+}
+.publish-dialog-body {
+  margin-bottom: 24px;
+}
+.publish-dialog .field {
+  margin-bottom: 20px;
+}
+.publish-dialog .field-label {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 8px;
+  display: block;
+}
+.publish-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
 .editor-loading { display: grid; place-items: center; height: 100%; font-size: 12px; color: var(--fg-mute); font-family: var(--mono); }
 
 /* ---- Skill Designer: list + editor + preview, list on the far left ------- */
@@ -381,8 +527,10 @@ textarea { resize: vertical; }
 .skill-item.on { border-color: var(--accent); background: var(--accent-soft); }
 .skill-item-name { font-size: 12.5px; font-weight: 600; color: var(--fg); }
 .skill-item-meta { display: flex; align-items: center; gap: 6px; margin-top: 4px; font-size: 11px; }
-.skill-item-remove { display: none; position: absolute; top: 6px; right: 8px; font-size: 10px; }
-.skill-item:hover .skill-item-remove { display: inline; }
+.skill-item-actions { display: none; gap: 10px; margin-top: 6px; font-size: 10px; }
+.skill-item:hover .skill-item-actions { display: flex; }
+.skill-item-detail { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); font-size: 11px; }
+.skill-item-detail ul { margin: 0; padding-left: 16px; }
 
 @media (max-width: 1200px) {
   .skill-layout { grid-template-columns: 1fr; }

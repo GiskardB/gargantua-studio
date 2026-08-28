@@ -2,7 +2,9 @@ package ai.gargantua.studio.controlplane;
 
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -41,5 +43,17 @@ public class PlatformController {
     @GetMapping("/deployments")
     public ResponseEntity<String> deployments() {
         return controlPlane.get("/api/v1/deployments");
+    }
+
+    /** Control Plane's own liveness, relayed so the UI can tell it apart from the Studio backend. */
+    @GetMapping("/control-plane/health")
+    public ResponseEntity<String> controlPlaneHealth() {
+        return controlPlane.get("/actuator/health");
+    }
+
+    /** Delete a published workload version. 409 if the Control Plane still has it deployed. */
+    @DeleteMapping("/workloads/{name}/{version}")
+    public ResponseEntity<String> deleteWorkload(@PathVariable String name, @PathVariable String version) {
+        return controlPlane.delete("/api/v1/registry/bundles/" + name + "/" + version);
     }
 }

@@ -3,12 +3,12 @@ import { Layout } from './components/Layout'
 import { AgentDesignerScreen } from './components/screens/AgentDesignerScreen'
 import { SkillDesignerScreen } from './components/screens/SkillDesignerScreen'
 import { WorkloadDesigner } from './components/screens/WorkloadDesigner'
-import { CapabilityDesigner } from './components/screens/CapabilityDesigner'
 import { Playground } from './components/screens/Playground'
 import { TraceExplorer } from './components/screens/TraceExplorer'
 import { EvaluationStudio } from './components/screens/EvaluationStudio'
 import { GatewayDesigner } from './components/screens/GatewayDesigner'
 import { SecurityDesigner } from './components/screens/SecurityDesigner'
+import { ControlPlaneStatus } from './components/screens/ControlPlaneStatus'
 
 // React Router drives navigation; the draft and platform state live in Zustand stores,
 // so screens no longer prop-drill. The Agent Designer is the default landing screen.
@@ -20,12 +20,12 @@ export default function App() {
         <Route path="/agent" element={<AgentDesignerScreen />} />
         <Route path="/skill" element={<SkillDesignerScreen />} />
         <Route path="/workload" element={<WorkloadDesigner />} />
-        <Route path="/capability" element={<CapabilityDesigner />} />
         <Route path="/playground" element={<Playground />} />
         <Route path="/trace" element={<TraceExplorer />} />
         <Route path="/evaluation" element={<EvaluationStudio />} />
         <Route path="/gateway" element={<GatewayDesigner />} />
         <Route path="/security" element={<SecurityDesigner />} />
+        <Route path="/control-plane" element={<ControlPlaneStatus />} />
         <Route path="*" element={<Navigate to="/agent" replace />} />
       </Route>
     </Routes>

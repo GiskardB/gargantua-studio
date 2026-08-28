@@ -9,10 +9,9 @@ import { CodeEditor } from './CodeEditor'
 
 interface Props {
   draft: SkillDraft
-  onAssign: () => void
 }
 
-export function SkillPreview({ draft, onAssign }: Props) {
+export function SkillPreview({ draft }: Props) {
   const [markdown, setMarkdown] = useState('')
   const [errors, setErrors] = useState<string[]>([])
   const [offline, setOffline] = useState(false)
@@ -66,14 +65,6 @@ export function SkillPreview({ draft, onAssign }: Props) {
           )}
           <button onClick={copy} disabled={!valid}>Copy</button>
           <button onClick={download} disabled={!valid}>Export</button>
-          <button
-            className="primary"
-            onClick={onAssign}
-            disabled={!valid}
-            title="Add or update a capability implemented by this skill on the current agent draft"
-          >
-            Assign to agent
-          </button>
         </div>
       </div>
 

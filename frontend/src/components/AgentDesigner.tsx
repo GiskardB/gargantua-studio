@@ -5,6 +5,7 @@
 
 import type {
   AgentDraft,
+  CapabilityDraft,
   McpServerDraft,
   GuardrailDraft,
   LoadoutDraft,
@@ -14,6 +15,7 @@ import type {
   Visibility,
 } from '../types/draft'
 import {
+  emptyCapability,
   emptyMcpServer,
   emptyGuardrail,
   emptyKnowledgeRef,
@@ -26,6 +28,7 @@ import {
   type MemoryLayer,
 } from '../types/manifest'
 import { Section, Field, TextInput, TextArea, Select, Checkbox } from './fields'
+import { useSkillsStore } from '../store/skillsStore'
 
 interface Props {
   draft: AgentDraft
@@ -33,6 +36,10 @@ interface Props {
 }
 
 export function AgentDesigner({ draft, onChange }: Props) {
+  // Skills the user has authored, so `implementedBy` can be picked rather than typed
+  // blind — this is now the only place a skill gets linked to an agent.
+  const savedSkills = useSkillsStore((s) => s.skills)
+
   // ---- top-level patch helpers ----
   const patch = (partial: Partial<AgentDraft>) => onChange({ ...draft, ...partial })
   const patchMeta = (partial: Partial<AgentDraft['metadata']>) =>
@@ -41,6 +48,27 @@ export function AgentDesigner({ draft, onChange }: Props) {
     patch({ runtime: { ...draft.runtime, ...partial } })
   const patchModel = (partial: Partial<AgentDraft['model']>) =>
     patch({ model: { ...draft.model, ...partial } })
+
+  // ---- capabilities (the only place a skill is linked to this agent) ----
+  const setCapability = (i: number, partial: Partial<CapabilityDraft>) =>
+    patch({
+      capabilities: draft.capabilities.map((c, idx) => (idx === i ? { ...c, ...partial } : c)),
+    })
+  const addCapability = () => patch({ capabilities: [...draft.capabilities, emptyCapability()] })
+  const removeCapability = (i: number) =>
+    patch({ capabilities: draft.capabilities.filter((_, idx) => idx !== i) })
+  // Picking a known skill as implementedBy prefills empty name/description/version from
+  // it — pure convenience, every field stays independently editable afterward.
+  const setCapabilityImplementedBy = (i: number, skillName: string) => {
+    const c = draft.capabilities[i]
+    const skill = savedSkills.find((s) => s.draft.name === skillName)?.draft
+    setCapability(i, {
+      implementedBy: skillName,
+      name: c.name || skill?.name || c.name,
+      description: c.description || skill?.description || c.description,
+      version: c.version || skill?.version || c.version,
+    })
+  }
 
   // ---- MCP servers ----
   const setServer = (i: number, partial: Partial<McpServerDraft>) =>
@@ -171,30 +199,40 @@ export function AgentDesigner({ draft, onChange }: Props) {
 
       <Section
         title="Capabilities"
-        hint="The external contract callers route on. Derived from skills — build and assign a skill in the Skill Designer to publish one; there's nothing to author here."
+        hint="The external contract callers route on. Implemented by is a skill name (write one in the Skill Designer first to have it suggested here) — this is the only place a skill gets linked to this agent."
       >
-        {draft.capabilities.length === 0 && (
-          <p className="empty">No capabilities yet — assign a skill in the Skill Designer.</p>
-        )}
-        {draft.capabilities.map((c) => (
-          <div className="card derived" key={c.implementedBy || c.name}>
+        <datalist id="known-skill-names">
+          {savedSkills.map((s) => s.draft.name && <option key={s.id} value={s.draft.name} />)}
+        </datalist>
+        {draft.capabilities.length === 0 && <p className="empty">No capabilities yet.</p>}
+        {draft.capabilities.map((c, i) => (
+          <div className="card" key={i}>
             <div className="card-head">
-              <strong className="mono">{c.name || '(unnamed)'}</strong>
-              <span className="dim mono">v{c.version || '0.0.0'}</span>
+              <strong>Capability {i + 1}</strong>
+              <button className="link danger" onClick={() => removeCapability(i)}>remove</button>
             </div>
-            <p className="detail-desc">{c.description || 'No description provided.'}</p>
-            <div className="detail-row">
-              <span className="detail-k">Implemented by</span>
-              <span className="mono">{c.implementedBy || '—'}</span>
+            <div className="grid three">
+              <Field label="Name" required><TextInput value={c.name} onChange={(v) => setCapability(i, { name: v })} placeholder="refund-payment" mono /></Field>
+              <Field label="Version"><TextInput value={c.version} onChange={(v) => setCapability(i, { version: v })} placeholder="1.0.0" mono /></Field>
+              <Field label="Implemented by" hint="Pick a skill you've written">
+                <TextInput
+                  value={c.implementedBy}
+                  onChange={(v) => setCapabilityImplementedBy(i, v)}
+                  placeholder="refund-skill"
+                  list="known-skill-names"
+                  mono
+                />
+              </Field>
             </div>
-            {c.tags && (
-              <div className="detail-row">
-                <span className="detail-k">Tags</span>
-                <span>{c.tags}</span>
-              </div>
-            )}
+            <Field label="Description"><TextArea value={c.description} onChange={(v) => setCapability(i, { description: v })} rows={2} /></Field>
+            <div className="grid three">
+              <Field label="Input schema"><TextInput value={c.inputSchema} onChange={(v) => setCapability(i, { inputSchema: v })} placeholder="schemas/refund-input.json" mono /></Field>
+              <Field label="Output schema"><TextInput value={c.outputSchema} onChange={(v) => setCapability(i, { outputSchema: v })} placeholder="schemas/refund-output.json" mono /></Field>
+              <Field label="Tags" hint="Comma-separated"><TextInput value={c.tags} onChange={(v) => setCapability(i, { tags: v })} placeholder="payments, gdpr" mono /></Field>
+            </div>
           </div>
         ))}
+        <button className="add" onClick={addCapability}>+ Add capability</button>
       </Section>
 
       <Section title="MCP servers" hint="In runtime mode this is where all tools come from.">

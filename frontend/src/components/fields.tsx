@@ -52,11 +52,14 @@ export function TextInput({
   onChange,
   placeholder,
   mono,
+  list,
 }: {
   value: string
   onChange: (v: string) => void
   placeholder?: string
   mono?: boolean
+  /** Wires an HTML `<datalist id="...">` for suggestions without forcing one of them. */
+  list?: string
 }) {
   return (
     <input
@@ -64,6 +67,7 @@ export function TextInput({
       type="text"
       value={value}
       placeholder={placeholder}
+      list={list}
       onChange={(e) => onChange(e.target.value)}
     />
   )

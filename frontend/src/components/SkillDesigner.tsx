@@ -5,6 +5,7 @@
 import type { SkillDraft } from '../types/skillDraft'
 import { MEMORY_LAYERS, type MemoryLayer } from '../types/manifest'
 import { Section, Field, TextInput, TextArea, Checkbox } from './fields'
+import { ReferenceFileUpload } from './ReferenceFileUpload'
 
 interface Props {
   draft: SkillDraft
@@ -109,11 +110,17 @@ export function SkillDesigner({ draft, onChange }: Props) {
         <Field label="Allowed roles" hint="Comma-separated, empty = no restriction">
           <TextInput value={draft.allowedRolesText} onChange={(v) => patch({ allowedRolesText: v })} placeholder="support-agent, super-admin" />
         </Field>
-        <Field label="References" hint="One file path per line, appended to the prompt">
+        <Field label="References" hint="One opaque note per line — NOT a file path, stored and appended verbatim. Upload actual files below.">
           <TextArea value={draft.referencesText} onChange={(v) => patch({ referencesText: v })} rows={2} mono />
         </Field>
         <Field label="Examples" hint="One example prompt per line, surfaced via the A2A Agent Card">
           <TextArea value={draft.examplesText} onChange={(v) => patch({ examplesText: v })} rows={2} />
+        </Field>
+        <Field
+          label="Reference files"
+          hint="Shipped as skills/<name>/references/<filename> in the bundle — the Runtime reads every file here and appends its content to the prompt. Text files only."
+        >
+          <ReferenceFileUpload files={draft.referenceFiles} onChange={(referenceFiles) => patch({ referenceFiles })} />
         </Field>
       </Section>
     </div>

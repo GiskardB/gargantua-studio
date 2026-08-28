@@ -2,6 +2,8 @@ package ai.gargantua.studio.manifest;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import ai.gargantua.bundle.ManifestParser;
+import ai.gargantua.core.workload.WorkloadManifest;
 import ai.gargantua.studio.manifest.AgentDraftRequest.Capability;
 import ai.gargantua.studio.manifest.AgentDraftRequest.Guardrail;
 import ai.gargantua.studio.manifest.AgentDraftRequest.McpServer;
@@ -37,9 +39,8 @@ class ManifestBuilderTest {
         return new Model("", "", "", "", "");
     }
 
-    @Test
-    void buildsCanonicalYamlFromAFullDraft() {
-        AgentDraftRequest draft = new AgentDraftRequest(
+    private AgentDraftRequest fullDraft() {
+        return new AgentDraftRequest(
                 new Metadata("customer-agent", "1.2.0", "Handles refunds", "payments", "env=prod"),
                 new Runtime("ghcr.io/giskardb/gargantua-runtime:1.0", "1.0"),
                 new Model("gpt-4o", "", "", "0.7", "1000"),
@@ -61,7 +62,11 @@ class ManifestBuilderTest {
                         List.of(new AgentDraftRequest.ResourceRef(
                                 "refund-form", "file", "resources/refund.pdf"))),
                 new AgentDraftRequest.Governance("acme", "internal", "active", "ops, support"));
+    }
 
+    @Test
+    void buildsCanonicalYamlFromAFullDraft() {
+        AgentDraftRequest draft = fullDraft();
         BuildResult result = builder.build(draft);
 
         assertThat(result.valid()).isTrue();
@@ -88,6 +93,67 @@ class ManifestBuilderTest {
         assertThat(yaml).contains("tenant: acme");
         assertThat(yaml).contains("visibility: internal");
         assertThat(yaml).contains("status: active");
+    }
+
+    /**
+     * The path a "click a workload to edit it" flow takes: publish's own output (YAML),
+     * parsed by the same {@link ManifestParser} the Runtime uses, must rehydrate a draft
+     * the form can show back to the user — not just the name, every field.
+     */
+    @Test
+    void toDraftRoundTripsAFullManifestBackToTheOriginalFields() {
+        AgentDraftRequest original = fullDraft();
+        String yaml = builder.build(original).yaml();
+
+        WorkloadManifest parsed = ManifestParser.parse(yaml);
+        AgentDraftRequest roundTripped = builder.toDraft(parsed);
+
+        assertThat(roundTripped.metadata().name()).isEqualTo("customer-agent");
+        assertThat(roundTripped.metadata().version()).isEqualTo("1.2.0");
+        assertThat(roundTripped.metadata().description()).isEqualTo("Handles refunds");
+        assertThat(roundTripped.metadata().owner()).isEqualTo("payments");
+        assertThat(roundTripped.metadata().labelsText()).isEqualTo("env=prod");
+
+        assertThat(roundTripped.runtime().image()).isEqualTo("ghcr.io/giskardb/gargantua-runtime:1.0");
+        assertThat(roundTripped.model().primary()).isEqualTo("gpt-4o");
+        assertThat(roundTripped.model().temperature()).isEqualTo("0.7");
+        assertThat(roundTripped.model().maxTokens()).isEqualTo("1000");
+
+        assertThat(roundTripped.capabilities()).hasSize(1);
+        AgentDraftRequest.Capability cap = roundTripped.capabilities().get(0);
+        assertThat(cap.name()).isEqualTo("refund-payment");
+        assertThat(cap.implementedBy()).isEqualTo("refund-skill");
+        assertThat(cap.tags()).contains("payments").contains("gdpr");
+
+        assertThat(roundTripped.mcpServers()).hasSize(1);
+        McpServer server = roundTripped.mcpServers().get(0);
+        assertThat(server.name()).isEqualTo("payments-api");
+        assertThat(server.transport()).isEqualTo("http");
+        assertThat(server.url()).isEqualTo("https://mcp.internal/payments");
+        assertThat(server.authType()).isEqualTo("bearer");
+        assertThat(server.authValue()).isEqualTo("${secrets.token}");
+        assertThat(server.allowedTools()).contains("getPayment").contains("refundPayment");
+
+        assertThat(roundTripped.memoryLayers()).containsExactlyInAnyOrder("WORKING", "EPISODIC");
+        assertThat(roundTripped.defaultSkill()).isEqualTo("default-skill");
+        assertThat(roundTripped.allowedRolesText()).contains("support-agent").contains("super-admin");
+
+        assertThat(roundTripped.guardrails()).hasSize(1);
+        assertThat(roundTripped.guardrails().get(0).name()).isEqualTo("pii-input");
+        assertThat(roundTripped.guardrails().get(0).settingsJson()).contains("enabled").contains("true");
+
+        assertThat(roundTripped.loadout().knowledge()).hasSize(1);
+        assertThat(roundTripped.loadout().knowledge().get(0).name()).isEqualTo("payments-kb");
+        assertThat(roundTripped.loadout().knowledge().get(0).maxResults()).isEqualTo("8");
+        assertThat(roundTripped.loadout().knowledge().get(0).minScore()).isEqualTo("0.55");
+        assertThat(roundTripped.loadout().memoryScopesText()).contains("customer-history");
+        assertThat(roundTripped.loadout().resources()).hasSize(1);
+        assertThat(roundTripped.loadout().resources().get(0).name()).isEqualTo("refund-form");
+
+        assertThat(roundTripped.governance().tenant()).isEqualTo("acme");
+        assertThat(roundTripped.governance().visibility()).isEqualTo("internal");
+        assertThat(roundTripped.governance().status()).isEqualTo("active");
+        assertThat(roundTripped.governance().accessText()).contains("ops").contains("support");
     }
 
     @Test

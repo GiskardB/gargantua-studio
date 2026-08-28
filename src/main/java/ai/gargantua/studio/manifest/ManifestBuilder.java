@@ -20,6 +20,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLGenerator;
 import com.fasterxml.jackson.dataformat.yaml.YAMLMapper;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -142,6 +143,142 @@ public class ManifestBuilder {
             }
         }
         return errors;
+    }
+
+    // ---- records -> draft (rehydrate the form when editing a published workload) --
+
+    /** The inverse of {@link #toManifest}: turn a parsed manifest back into a form draft. */
+    public AgentDraftRequest toDraft(WorkloadManifest manifest) {
+        WorkloadMetadata md = manifest.metadata();
+        AgentSpec spec = manifest.agentSpec();
+
+        return new AgentDraftRequest(
+                new AgentDraftRequest.Metadata(
+                        nullToEmpty(md.name()),
+                        nullToEmpty(md.version()),
+                        nullToEmpty(md.description()),
+                        nullToEmpty(md.owner()),
+                        joinKeyValues(md.labels())),
+                new AgentDraftRequest.Runtime(
+                        nullToEmpty(spec.runtime().image()),
+                        nullToEmpty(spec.runtime().minVersion())),
+                new AgentDraftRequest.Model(
+                        nullToEmpty(spec.model().primary()),
+                        nullToEmpty(spec.model().fallback()),
+                        nullToEmpty(spec.model().routing()),
+                        numberToString(spec.model().temperature()),
+                        numberToString(spec.model().maxTokens())),
+                capabilityDrafts(spec.capabilities()),
+                mcpServerDrafts(spec.mcpServers()),
+                spec.memoryLayers().stream().map(Enum::name).toList(),
+                nullToEmpty(spec.defaultSkill()),
+                joinCsv(spec.allowedRoles()),
+                guardrailDrafts(spec.guardrails()),
+                loadoutDraft(spec.loadout()),
+                governanceDraft(md.governance()),
+                List.of());
+    }
+
+    private List<AgentDraftRequest.Capability> capabilityDrafts(List<Capability> caps) {
+        List<AgentDraftRequest.Capability> out = new ArrayList<>();
+        for (Capability c : caps) {
+            out.add(new AgentDraftRequest.Capability(
+                    nullToEmpty(c.name()),
+                    nullToEmpty(c.description()),
+                    nullToEmpty(c.version()),
+                    nullToEmpty(c.implementedBy()),
+                    nullToEmpty(c.inputSchema()),
+                    nullToEmpty(c.outputSchema()),
+                    joinCsv(c.tags())));
+        }
+        return out;
+    }
+
+    private List<AgentDraftRequest.McpServer> mcpServerDrafts(List<McpServerSpec> servers) {
+        List<AgentDraftRequest.McpServer> out = new ArrayList<>();
+        for (McpServerSpec s : servers) {
+            McpAuth auth = s.auth() == null ? McpAuth.none() : s.auth();
+            out.add(new AgentDraftRequest.McpServer(
+                    nullToEmpty(s.name()),
+                    s.transport().name().toLowerCase(),
+                    nullToEmpty(s.command()),
+                    String.join(" ", s.args()),
+                    joinKeyValues(s.env()),
+                    nullToEmpty(s.url()),
+                    auth.type(),
+                    nullToEmpty(auth.value()),
+                    nullToEmpty(auth.headerName()),
+                    joinCsv(s.allowedTools()),
+                    s.enabled()));
+        }
+        return out;
+    }
+
+    private List<AgentDraftRequest.Guardrail> guardrailDrafts(Map<String, Object> guardrails) {
+        List<AgentDraftRequest.Guardrail> out = new ArrayList<>();
+        for (Map.Entry<String, Object> e : guardrails.entrySet()) {
+            out.add(new AgentDraftRequest.Guardrail(e.getKey(), writeJson(e.getValue())));
+        }
+        return out;
+    }
+
+    private AgentDraftRequest.Loadout loadoutDraft(Loadout l) {
+        List<AgentDraftRequest.KnowledgeRef> knowledge = new ArrayList<>();
+        for (KnowledgeRef k : l.knowledge()) {
+            knowledge.add(new AgentDraftRequest.KnowledgeRef(
+                    nullToEmpty(k.name()),
+                    nullToEmpty(k.description()),
+                    numberToString(k.maxResults()),
+                    numberToString(k.minScore())));
+        }
+        List<AgentDraftRequest.ResourceRef> resources = new ArrayList<>();
+        for (ResourceRef r : l.resources()) {
+            resources.add(new AgentDraftRequest.ResourceRef(
+                    nullToEmpty(r.name()), nullToEmpty(r.type()), nullToEmpty(r.uri())));
+        }
+        return new AgentDraftRequest.Loadout(
+                knowledge, joinCsv(l.memoryScopes()), joinCsv(l.skills()), resources);
+    }
+
+    private AgentDraftRequest.Governance governanceDraft(GovernanceEnvelope g) {
+        return new AgentDraftRequest.Governance(
+                nullToEmpty(g.tenant()),
+                g.visibility() == Visibility.PRIVATE ? "" : g.visibility().name().toLowerCase(),
+                nullToEmpty(g.status()),
+                joinCsv(g.access()));
+    }
+
+    private static String nullToEmpty(String s) {
+        return s == null ? "" : s;
+    }
+
+    private static String numberToString(Object n) {
+        return n == null ? "" : String.valueOf(n);
+    }
+
+    /** Inverse of {@link #parseCsv}. */
+    private static String joinCsv(Collection<String> items) {
+        return String.join(", ", items);
+    }
+
+    /** Inverse of {@link #parseKeyValues}. */
+    private static String joinKeyValues(Map<String, String> map) {
+        StringBuilder sb = new StringBuilder();
+        for (Map.Entry<String, String> e : map.entrySet()) {
+            if (sb.length() > 0) {
+                sb.append('\n');
+            }
+            sb.append(e.getKey()).append('=').append(e.getValue());
+        }
+        return sb.toString();
+    }
+
+    private String writeJson(Object value) {
+        try {
+            return json.writerWithDefaultPrettyPrinter().writeValueAsString(value);
+        } catch (Exception e) {
+            return "{}";
+        }
     }
 
     // ---- draft -> records -------------------------------------------------------

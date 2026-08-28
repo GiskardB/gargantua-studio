@@ -1,72 +1,24 @@
-// Live manifest preview + validation. The backend is the authority: on every change
-// the draft is sent to /manifest/build, which validates it against the shared agent-core
-// model and returns the canonical YAML. When the backend is offline it falls back to the
-// local builder so the Studio stays useful — the badge says which path produced the YAML.
+// Manifest YAML display: copy/export and the post-publish Launch panel. Build state
+// (yaml/errors/source) and the publish action itself live in the screen (via
+// lib/useManifestPreview) so the "Save & Publish" button can sit in the screen's
+// action bar while this stays a plain, single-purpose presentational panel.
 
-import { useEffect, useRef, useState } from 'react'
-import type { AgentDraft } from '../types/draft'
-import { buildManifest as buildLocal } from '../lib/buildManifest'
-import { toYaml } from '../lib/toYaml'
-import { validateDraft } from '../lib/validate'
-import {
-  buildManifest as buildRemote,
-  OfflineError,
-  publishDraft,
-  skillsForDraft,
-  getLaunchCommand,
-  setLaunchCommand,
-  launchAgent,
-  type LaunchResult,
-} from '../lib/api'
-import { useSkillsStore } from '../store/skillsStore'
+import { useEffect, useState } from 'react'
+import { getLaunchCommand, setLaunchCommand, launchAgent, type LaunchResult } from '../lib/api'
+import type { PublishNote } from '../lib/useManifestPreview'
 import { CodeEditor } from './CodeEditor'
 
 interface Props {
-  draft: AgentDraft
+  yaml: string
+  errors: string[]
+  source: 'backend' | 'local'
+  filename: string
+  publishState: PublishNote | null
+  published: { name: string; version: string } | null
 }
 
-type Source = 'backend' | 'local'
-
-function localBuild(draft: AgentDraft): { yaml: string; errors: string[] } {
-  const issues = validateDraft(draft)
-  return {
-    yaml: toYaml(buildLocal(draft)),
-    errors: issues.filter((i) => i.severity === 'error').map((i) => `${i.path}: ${i.message}`),
-  }
-}
-
-export function ManifestPreview({ draft }: Props) {
-  const [yaml, setYaml] = useState('')
-  const [errors, setErrors] = useState<string[]>([])
-  const [source, setSource] = useState<Source>('local')
-  const [publishState, setPublishState] = useState<{ tone: string; text: string } | null>(null)
-  // Set once a publish succeeds, so the agent can then be launched by name@version.
-  const [published, setPublished] = useState<{ name: string; version: string } | null>(null)
-  const seq = useRef(0)
-
-  useEffect(() => {
-    const id = ++seq.current
-    const timer = setTimeout(async () => {
-      try {
-        const res = await buildRemote(draft)
-        if (id !== seq.current) return
-        setSource('backend')
-        setYaml(res.yaml ?? '')
-        setErrors(res.errors)
-      } catch {
-        if (id !== seq.current) return
-        // Backend down (or a non-offline error): fall back to the local builder.
-        const local = localBuild(draft)
-        setSource('local')
-        setYaml(local.yaml)
-        setErrors(local.errors)
-      }
-    }, 250)
-    return () => clearTimeout(timer)
-  }, [draft])
-
+export function ManifestPreview({ yaml, errors, source, filename, publishState, published }: Props) {
   const valid = errors.length === 0
-  const filename = `${draft.metadata.name || 'agent'}-manifest.yaml`
 
   const copy = () => void navigator.clipboard?.writeText(yaml)
 
@@ -78,23 +30,6 @@ export function ManifestPreview({ draft }: Props) {
     a.download = filename
     a.click()
     URL.revokeObjectURL(url)
-  }
-
-  const publish = async () => {
-    setPublishState({ tone: 'info', text: 'Publishing…' })
-    setPublished(null)
-    try {
-      const skills = skillsForDraft(draft, useSkillsStore.getState().skills.map((e) => e.draft))
-      await publishDraft(draft, skills)
-      setPublishState({
-        tone: 'good',
-        text: `Published ${draft.metadata.name}@${draft.metadata.version}`,
-      })
-      setPublished({ name: draft.metadata.name, version: draft.metadata.version })
-    } catch (e) {
-      const msg = e instanceof OfflineError ? 'Backend offline — cannot publish' : (e as Error).message
-      setPublishState({ tone: 'bad', text: msg })
-    }
   }
 
   return (
@@ -110,14 +45,6 @@ export function ManifestPreview({ draft }: Props) {
           </span>
           <button onClick={copy}>Copy</button>
           <button onClick={download} disabled={!valid}>Export</button>
-          <button
-            className="primary"
-            onClick={publish}
-            disabled={!valid || source !== 'backend'}
-            title={source !== 'backend' ? 'Publishing needs the backend online' : 'Publish to the Control Plane'}
-          >
-            Publish
-          </button>
         </div>
       </div>
 

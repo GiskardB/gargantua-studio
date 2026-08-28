@@ -7,6 +7,15 @@
 
 import type { MemoryLayer } from './manifest'
 
+// A text file shipped at skills/<name>/references/<name> in the bundle. The Runtime's
+// FilesystemSkillRegistry reads every file in that folder and appends its content to
+// the skill's references — the only way to ship supporting docs the frontmatter
+// `references:` list (opaque strings) can't carry.
+export interface ReferenceFile {
+  name: string
+  content: string
+}
+
 export interface SkillDraft {
   name: string
   description: string
@@ -26,6 +35,7 @@ export interface SkillDraft {
   allowedRolesText: string // comma-separated
   memoryLayers: MemoryLayer[]
   systemPrompt: string
+  referenceFiles: ReferenceFile[]
 }
 
 export function emptySkillDraft(): SkillDraft {
@@ -48,6 +58,7 @@ export function emptySkillDraft(): SkillDraft {
     allowedRolesText: '',
     memoryLayers: [],
     systemPrompt: '',
+    referenceFiles: [],
   }
 }
 
@@ -78,5 +89,6 @@ export function sampleSkillDraft(): SkillDraft {
       'response. If the user asks about a location you cannot resolve, ask for ' +
       'clarification rather than guessing.\n\n' +
       'Do NOT answer questions unrelated to weather. Politely redirect the user.',
+    referenceFiles: [],
   }
 }

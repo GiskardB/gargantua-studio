@@ -1,13 +1,15 @@
+import { useEffect, useState } from 'react'
 import { SkillDesigner } from '../SkillDesigner'
 import { SkillPreview } from '../SkillPreview'
 import { Screen, Badge } from '../ui'
 import { useSkillsStore } from '../../store/skillsStore'
-import { useDraftStore } from '../../store/draftStore'
+import { usePlatformStore } from '../../store/platformStore'
 
 // Skills are bundle content (SKILL.md), not manifest fields — authoring one here never
-// publishes anything. "Assign to agent" is the bridge to the Agent Designer: it upserts
-// a Capability on the current draft with implementedBy = this skill's name, so the
-// agent's advertised capabilities stay derived from the skills you've actually written.
+// publishes anything, and this screen no longer assigns a skill to an agent (that only
+// happens in the Agent Designer's Capabilities section, by picking a skill name as
+// `implementedBy`). What this screen shows instead is which *published* agents already
+// use a given skill — read-only, derived from live Control Plane data.
 export function SkillDesignerScreen() {
   const skills = useSkillsStore((s) => s.skills)
   const selectedId = useSkillsStore((s) => s.selectedId)
@@ -16,10 +18,33 @@ export function SkillDesignerScreen() {
   const addSample = useSkillsStore((s) => s.addSample)
   const remove = useSkillsStore((s) => s.remove)
   const update = useSkillsStore((s) => s.update)
-  const assignSkillAsCapability = useDraftStore((s) => s.assignSkillAsCapability)
-  const agentCapabilities = useDraftStore((s) => s.draft.capabilities)
+  const save = useSkillsStore((s) => s.save)
+  const duplicate = useSkillsStore((s) => s.duplicate)
+  const loadFromServer = useSkillsStore((s) => s.loadFromServer)
+
+  const skillAssignments = usePlatformStore((s) => s.skillAssignments)
+  const refreshPlatform = usePlatformStore((s) => s.refresh)
+
+  const [detailId, setDetailId] = useState<string | null>(null)
+  const [saveState, setSaveState] = useState<{ tone: string; text: string } | null>(null)
+
+  useEffect(() => {
+    void loadFromServer()
+    void refreshPlatform()
+  }, [loadFromServer, refreshPlatform])
 
   const selected = skills.find((s) => s.id === selectedId) ?? skills[0]
+
+  const handleSave = async () => {
+    if (!selected) return
+    setSaveState({ tone: 'info', text: 'Saving…' })
+    try {
+      await save(selected.id)
+      setSaveState({ tone: 'good', text: 'Saved' })
+    } catch (e) {
+      setSaveState({ tone: 'bad', text: e instanceof Error ? e.message : 'save failed' })
+    }
+  }
 
   return (
     <Screen
@@ -35,7 +60,8 @@ export function SkillDesignerScreen() {
       <div className="skill-layout">
         <div className="skill-list">
           {skills.map((entry) => {
-            const assigned = agentCapabilities.some((c) => c.implementedBy === entry.draft.name)
+            const assignments = skillAssignments[entry.draft.name] ?? []
+            const detailOpen = detailId === entry.id
             return (
               <div
                 key={entry.id}
@@ -45,18 +71,56 @@ export function SkillDesignerScreen() {
                 <div className="skill-item-name mono">{entry.draft.name || '(unnamed)'}</div>
                 <div className="skill-item-meta">
                   {entry.draft.version && <span className="dim mono">v{entry.draft.version}</span>}
-                  {assigned && <Badge tone="good">assigned</Badge>}
+                  {!entry.persisted && <Badge tone="warn">unsaved</Badge>}
+                  {assignments.length > 0 && (
+                    <Badge tone="good">
+                      {assignments.length} agent{assignments.length > 1 ? 's' : ''}
+                    </Badge>
+                  )}
                 </div>
-                {skills.length > 1 && (
+                <div className="skill-item-actions">
                   <button
-                    className="link danger skill-item-remove"
+                    className="link"
                     onClick={(e) => {
                       e.stopPropagation()
-                      remove(entry.id)
+                      setDetailId(detailOpen ? null : entry.id)
                     }}
                   >
-                    remove
+                    detail
                   </button>
+                  <button
+                    className="link"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      void duplicate(entry.id)
+                    }}
+                  >
+                    duplicate
+                  </button>
+                  {skills.length > 1 && (
+                    <button
+                      className="link danger"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        void remove(entry.id)
+                      }}
+                    >
+                      remove
+                    </button>
+                  )}
+                </div>
+                {detailOpen && (
+                  <div className="skill-item-detail" onClick={(e) => e.stopPropagation()}>
+                    {assignments.length === 0 ? (
+                      <p className="dim">Not used by any published agent yet.</p>
+                    ) : (
+                      <ul>
+                        {assignments.map((a, i) => (
+                          <li key={i} className="mono">{a.name}@{a.version}</li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
                 )}
               </div>
             )
@@ -69,7 +133,11 @@ export function SkillDesignerScreen() {
               <SkillDesigner draft={selected.draft} onChange={(next) => update(selected.id, next)} />
             </div>
             <div className="agent-preview">
-              <SkillPreview draft={selected.draft} onAssign={() => assignSkillAsCapability(selected.draft)} />
+              <div className="preview-collapse-row">
+                {saveState && <span className={`publish-note ${saveState.tone}`}>{saveState.text}</span>}
+                <button className="primary" onClick={handleSave}>Save</button>
+              </div>
+              <SkillPreview draft={selected.draft} />
             </div>
           </>
         )}

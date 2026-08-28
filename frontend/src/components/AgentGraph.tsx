@@ -1,150 +1,384 @@
-// A visual, read-through view of the agent draft as a graph: the agent at the centre,
-// wired to its model, capabilities, MCP servers and memory layers. It rebuilds from the
-// same draft the form edits, so switching to "Graph" shows exactly what you've authored.
+// A visual, interactive view of the agent draft as a graph: the agent at the centre,
+// wired to its model, capabilities, MCP servers and memory layers. Nodes are draggable,
+// and clicking a node opens a detail panel for quick editing. Switching to "Graph"
+// shows exactly what the form has authored; changes in the graph sync back to the
+// draft immediately.
 
-import { useMemo } from 'react'
+import { useMemo, useState, useCallback } from 'react'
 import {
   Background,
   Controls,
   MiniMap,
-  Position,
   ReactFlow,
-  type Edge,
   type Node,
+  type NodeChange,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import type { AgentDraft } from '../types/draft'
+import type { AgentDraft, CapabilityDraft, McpServerDraft, KnowledgeRefDraft } from '../types/draft'
+import { MEMORY_LAYERS, type MemoryLayer } from '../types/manifest'
+import { Field, TextInput, TextArea, Select, Checkbox } from './fields'
+
+// ── colours ─────────────────────────────────────────────────────────────────
 
 const COLORS = {
-  agent: { bg: '#eef3ff', border: '#2f6fed' },
-  model: { bg: '#fff7e6', border: '#d99a1c' },
-  capability: { bg: '#eafbf0', border: '#2fa960' },
-  mcp: { bg: '#eef6ff', border: '#3a86c8' },
-  memory: { bg: '#f4eefb', border: '#8b5cd6' },
+  agent:     { bg: '#eef3ff', border: '#2f6fed' },
+  model:     { bg: '#fff7e6', border: '#d99a1c' },
+  capability:{ bg: '#eafbf0', border: '#2fa960' },
+  mcp:       { bg: '#eef6ff', border: '#3a86c8' },
+  memory:    { bg: '#f4eefb', border: '#8b5cd6' },
   knowledge: { bg: '#fdeef4', border: '#c8437f' },
 }
 
-function nodeStyle(kind: keyof typeof COLORS): React.CSSProperties {
-  const c = COLORS[kind]
-  return {
-    background: c.bg,
-    border: `1px solid ${c.border}`,
-    borderRadius: 8,
-    fontSize: 12,
-    padding: '8px 12px',
-    color: '#1a2233',
-    width: 180,
-  }
+const KIND_LABELS: Record<string, string> = {
+  agent: 'Agent',
+  model: 'Model',
+  capability: 'Capability',
+  mcp: 'MCP Server',
+  memory: 'Memory',
+  knowledge: 'Knowledge',
 }
 
-function buildGraph(draft: AgentDraft): { nodes: Node[]; edges: Edge[] } {
-  const nodes: Node[] = []
-  const edges: Edge[] = []
+// ── graph builder ────────────────────────────────────────────────────────────
 
-  const agentId = 'agent'
-  nodes.push({
-    id: agentId,
-    position: { x: 40, y: 240 },
-    data: { label: `🤖 ${draft.metadata.name || 'agent'}\nv${draft.metadata.version || '0.0.0'}` },
-    style: { ...nodeStyle('agent'), width: 200, fontWeight: 600, whiteSpace: 'pre-line' },
-    sourcePosition: Position.Right,
-    targetPosition: Position.Left,
-  })
+interface NodeData extends Record<string, unknown> {
+  label: string
+  kind: string
+  idx?: number
+  version?: string
+  transport?: string
+  enabled?: boolean
+}
 
-  const column = (x: number, count: number, startY = 20, gap: number = 64) => {
-    const height = count * gap
-    const offset = 240 + 40 - height / 2 // roughly centre the column on the agent
+function buildGraph(draft: AgentDraft): Node<NodeData>[] {
+  const nodes: Node<NodeData>[] = []
+  const c = (x: number, total: number, startY = 0, gap = 70) => {
+    const height = total * gap
+    const offset = 280 + 40 - height / 2
     return (i: number) => ({ x, y: Math.max(startY, offset) + i * gap })
   }
 
-  // Model
+  nodes.push({
+    id: 'agent',
+    position: { x: 40, y: 280 },
+    data: { label: draft.metadata.name || 'agent', version: draft.metadata.version || '0.0.0', kind: 'agent' },
+    style: {
+      background: COLORS.agent.bg,
+      border: `2px solid ${COLORS.agent.border}`,
+      borderRadius: 12,
+      fontSize: 13,
+      padding: '12px 16px',
+      color: '#1a2233',
+      fontWeight: 600,
+      width: 210,
+      cursor: 'default',
+    },
+    type: 'default',
+    draggable: true,
+  })
+
+  const col1 = c(340, Math.max(draft.capabilities.length, draft.mcpServers.length, 1), 60)
+
   if (draft.model.primary) {
     nodes.push({
       id: 'model',
-      position: { x: 320, y: 20 },
-      data: { label: `model: ${draft.model.primary}` },
-      style: nodeStyle('model'),
-      targetPosition: Position.Left,
+      position: { x: 340, y: 20 },
+      data: { label: draft.model.primary, kind: 'model' },
+      style: { background: COLORS.model.bg, border: `1px solid ${COLORS.model.border}`, borderRadius: 8, fontSize: 12, padding: '8px 12px', color: '#5a3800', width: 190 },
+      type: 'default',
+      draggable: true,
     })
-    edges.push({ id: 'e-model', source: agentId, target: 'model', animated: true })
   }
 
-  // Capabilities
-  const capAt = column(320, draft.capabilities.length, 100)
-  draft.capabilities.forEach((c, i) => {
-    const id = `cap-${i}`
+  draft.capabilities.forEach((cap, i) => {
     nodes.push({
-      id,
-      position: capAt(i),
-      data: { label: `⚡ ${c.name || 'capability'}` },
-      style: nodeStyle('capability'),
-      targetPosition: Position.Left,
+      id: `cap-${i}`,
+      position: col1(i),
+      data: { label: cap.name || `cap-${i + 1}`, kind: 'capability', idx: i },
+      style: { background: COLORS.capability.bg, border: `1px solid ${COLORS.capability.border}`, borderRadius: 8, fontSize: 12, padding: '8px 12px', color: '#0f3320', width: 200 },
+      type: 'default',
+      draggable: true,
     })
-    edges.push({ id: `e-${id}`, source: agentId, target: id })
   })
 
-  // MCP servers
-  const mcpAt = column(580, draft.mcpServers.length)
-  draft.mcpServers.forEach((s, i) => {
-    const id = `mcp-${i}`
+  draft.mcpServers.forEach((srv, i) => {
     nodes.push({
-      id,
-      position: mcpAt(i),
-      data: { label: `🔌 ${s.name || 'server'} (${s.transport})` },
-      style: { ...nodeStyle('mcp'), opacity: s.enabled ? 1 : 0.5 },
-      targetPosition: Position.Left,
+      id: `mcp-${i}`,
+      position: col1(draft.capabilities.length + i),
+      data: { label: srv.name || `mcp-${i + 1}`, transport: srv.transport, enabled: srv.enabled, kind: 'mcp', idx: i },
+      style: { background: COLORS.mcp.bg, border: `1px solid ${COLORS.mcp.border}`, borderRadius: 8, fontSize: 12, padding: '8px 12px', color: '#0f2a44', width: 200, opacity: srv.enabled ? 1 : 0.55 },
+      type: 'default',
+      draggable: true,
     })
-    edges.push({ id: `e-${id}`, source: agentId, target: id })
   })
 
-  // Memory layers
-  const memAt = column(840, draft.memoryLayers.length)
+  const memCount = draft.memoryLayers.length || 1
+  const memGap = 60
+  const memHeight = memCount * memGap
+  const memOffset = 280 + 40 - memHeight / 2
   draft.memoryLayers.forEach((m, i) => {
-    const id = `mem-${i}`
     nodes.push({
-      id,
-      position: memAt(i),
-      data: { label: `🧠 ${m}` },
-      style: nodeStyle('memory'),
-      targetPosition: Position.Left,
+      id: `mem-${i}`,
+      position: { x: 640, y: Math.max(60, memOffset) + i * memGap },
+      data: { label: m, kind: 'memory', idx: i },
+      style: { background: COLORS.memory.bg, border: `1px solid ${COLORS.memory.border}`, borderRadius: 8, fontSize: 12, padding: '8px 12px', color: '#3b1a6b', width: 160 },
+      type: 'default',
+      draggable: true,
     })
-    edges.push({ id: `e-${id}`, source: agentId, target: id })
   })
 
-  // Loadout — knowledge bases (the targeted-knowledge part of the loadout)
-  const kbAt = column(1100, draft.loadout.knowledge.length)
+  const kbCount = draft.loadout.knowledge.length || 1
+  const kbGap = 60
+  const kbHeight = kbCount * kbGap
+  const kbOffset = 280 + 40 - kbHeight / 2
   draft.loadout.knowledge.forEach((k, i) => {
-    const id = `kb-${i}`
     nodes.push({
-      id,
-      position: kbAt(i),
-      data: { label: `📚 ${k.name || 'knowledge'}` },
-      style: nodeStyle('knowledge'),
-      targetPosition: Position.Left,
+      id: `kb-${i}`,
+      position: { x: 870, y: Math.max(60, kbOffset) + i * kbGap },
+      data: { label: k.name || `kb-${i + 1}`, kind: 'knowledge', idx: i },
+      style: { background: COLORS.knowledge.bg, border: `1px solid ${COLORS.knowledge.border}`, borderRadius: 8, fontSize: 12, padding: '8px 12px', color: '#5a1030', width: 180 },
+      type: 'default',
+      draggable: true,
     })
-    edges.push({ id: `e-${id}`, source: agentId, target: id })
   })
 
-  return { nodes, edges }
+  return nodes
 }
 
-export function AgentGraph({ draft }: { draft: AgentDraft }) {
-  const { nodes, edges } = useMemo(() => buildGraph(draft), [draft])
+// ── detail panel ─────────────────────────────────────────────────────────────
+
+function GraphDetailPanel({
+  node, draft, onChange, onClose,
+}: {
+  node: Node<NodeData>
+  draft: AgentDraft
+  onChange: (d: AgentDraft) => void
+  onClose: () => void
+}) {
+  const { kind, idx } = node.data
+
+  const patch = (partial: Partial<AgentDraft>) => onChange({ ...draft, ...partial })
+
+  // capabilities
+  if (kind === 'capability' && idx !== undefined) {
+    const cap = draft.capabilities[idx]
+    const setCap = (p: Partial<CapabilityDraft>) =>
+      patch({ capabilities: draft.capabilities.map((c, i) => i === idx ? { ...c, ...p } : c) })
+    return (
+      <div className="graph-detail">
+        <div className="graph-detail-head">
+          <span className="graph-detail-kind">{KIND_LABELS[kind]}</span>
+          <span className="graph-detail-name">{node.data.label}</span>
+          <button className="link" onClick={onClose}>✕</button>
+        </div>
+        <div className="graph-detail-body">
+          <Field label="Name"><TextInput value={cap.name} onChange={(v) => setCap({ name: v })} mono /></Field>
+          <Field label="Description"><TextArea value={cap.description} onChange={(v) => setCap({ description: v })} rows={2} /></Field>
+          <Field label="Version"><TextInput value={cap.version} onChange={(v) => setCap({ version: v })} mono /></Field>
+          <Field label="Implemented by"><TextInput value={cap.implementedBy} onChange={(v) => setCap({ implementedBy: v })} mono /></Field>
+          <Field label="Tags"><TextInput value={cap.tags} onChange={(v) => setCap({ tags: v })} mono /></Field>
+        </div>
+      </div>
+    )
+  }
+
+  // MCP servers
+  if (kind === 'mcp' && idx !== undefined) {
+    const srv = draft.mcpServers[idx]
+    const setSrv = (p: Partial<McpServerDraft>) =>
+      patch({ mcpServers: draft.mcpServers.map((s, i) => i === idx ? { ...s, ...p } : s) })
+    return (
+      <div className="graph-detail">
+        <div className="graph-detail-head">
+          <span className="graph-detail-kind">{KIND_LABELS[kind]}</span>
+          <span className="graph-detail-name">{node.data.label}</span>
+          <button className="link" onClick={onClose}>✕</button>
+        </div>
+        <div className="graph-detail-body">
+          <Field label="Name"><TextInput value={srv.name} onChange={(v) => setSrv({ name: v })} mono /></Field>
+          <Field label="Transport">
+            <Select value={srv.transport} options={['http', 'stdio', 'sse', 'custom']} onChange={(v) => setSrv({ transport: v as typeof srv.transport })} />
+          </Field>
+          <Field label="URL"><TextInput value={srv.url} onChange={(v) => setSrv({ url: v })} mono /></Field>
+          <Field label="Enabled"><Checkbox checked={srv.enabled} onChange={(v) => setSrv({ enabled: v })} label={srv.enabled ? 'enabled' : 'disabled'} /></Field>
+          <Field label="Allowed tools"><TextInput value={srv.allowedTools} onChange={(v) => setSrv({ allowedTools: v })} mono /></Field>
+        </div>
+      </div>
+    )
+  }
+
+  // memory layers
+  if (kind === 'memory' && idx !== undefined) {
+    const layer = draft.memoryLayers[idx] as MemoryLayer
+    const setLayer = (layers: MemoryLayer[]) => patch({ memoryLayers: layers })
+    return (
+      <div className="graph-detail">
+        <div className="graph-detail-head">
+          <span className="graph-detail-kind">Memory Layer</span>
+          <span className="graph-detail-name">{layer}</span>
+          <button className="link" onClick={onClose}>✕</button>
+        </div>
+        <div className="graph-detail-body">
+          <p className="dim" style={{ fontSize: 12 }}>Toggle which layers to enable:</p>
+          <div className="chips">
+            {MEMORY_LAYERS.map(l => (
+              <button key={l} className={draft.memoryLayers.includes(l) ? 'chip on' : 'chip'} onClick={() => {
+                const has = draft.memoryLayers.includes(l)
+                const next = has ? draft.memoryLayers.filter(x => x !== l) : [...draft.memoryLayers, l]
+                setLayer(next as MemoryLayer[])
+              }}>{l}</button>
+            ))}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // knowledge bases
+  if (kind === 'knowledge' && idx !== undefined) {
+    const kb = draft.loadout.knowledge[idx]
+    const setKb = (p: Partial<KnowledgeRefDraft>) =>
+      patch({ loadout: { ...draft.loadout, knowledge: draft.loadout.knowledge.map((k, i) => i === idx ? { ...k, ...p } : k) } })
+    return (
+      <div className="graph-detail">
+        <div className="graph-detail-head">
+          <span className="graph-detail-kind">Knowledge</span>
+          <span className="graph-detail-name">{node.data.label}</span>
+          <button className="link" onClick={onClose}>✕</button>
+        </div>
+        <div className="graph-detail-body">
+          <Field label="Name"><TextInput value={kb.name} onChange={(v) => setKb({ name: v })} mono /></Field>
+          <Field label="Description"><TextArea value={kb.description} onChange={(v) => setKb({ description: v })} rows={2} /></Field>
+          <Field label="Max results"><TextInput value={kb.maxResults} onChange={(v) => setKb({ maxResults: v })} mono /></Field>
+          <Field label="Min score"><TextInput value={kb.minScore} onChange={(v) => setKb({ minScore: v })} mono /></Field>
+        </div>
+      </div>
+    )
+  }
+
+  // model
+  if (kind === 'model') {
+    const patchModel = (p: Partial<AgentDraft['model']>) => patch({ model: { ...draft.model, ...p } })
+    return (
+      <div className="graph-detail">
+        <div className="graph-detail-head">
+          <span className="graph-detail-kind">Model</span>
+          <span className="graph-detail-name">{node.data.label}</span>
+          <button className="link" onClick={onClose}>✕</button>
+        </div>
+        <div className="graph-detail-body">
+          <Field label="Primary"><TextInput value={draft.model.primary} onChange={(v) => patchModel({ primary: v })} mono /></Field>
+          <Field label="Fallback"><TextInput value={draft.model.fallback} onChange={(v) => patchModel({ fallback: v })} mono /></Field>
+          <Field label="Temperature"><TextInput value={draft.model.temperature} onChange={(v) => patchModel({ temperature: v })} mono /></Field>
+          <Field label="Max tokens"><TextInput value={draft.model.maxTokens} onChange={(v) => patchModel({ maxTokens: v })} mono /></Field>
+        </div>
+      </div>
+    )
+  }
+
+  // agent root
+  if (kind === 'agent') {
+    const patchMeta = (p: Partial<AgentDraft['metadata']>) => patch({ metadata: { ...draft.metadata, ...p } })
+    return (
+      <div className="graph-detail">
+        <div className="graph-detail-head">
+          <span className="graph-detail-kind">Agent</span>
+          <span className="graph-detail-name">{node.data.label}</span>
+          <button className="link" onClick={onClose}>✕</button>
+        </div>
+        <div className="graph-detail-body">
+          <Field label="Name"><TextInput value={draft.metadata.name} onChange={(v) => patchMeta({ name: v })} mono /></Field>
+          <Field label="Version"><TextInput value={draft.metadata.version} onChange={(v) => patchMeta({ version: v })} mono /></Field>
+          <Field label="Description"><TextArea value={draft.metadata.description} onChange={(v) => patchMeta({ description: v })} rows={2} /></Field>
+          <Field label="Owner"><TextInput value={draft.metadata.owner} onChange={(v) => patchMeta({ owner: v })} /></Field>
+        </div>
+      </div>
+    )
+  }
+
+  return null
+}
+
+// ── main component ───────────────────────────────────────────────────────────
+
+export function AgentGraph({ draft, onDraftChange }: { draft: AgentDraft; onDraftChange: (d: AgentDraft) => void }) {
+  const [nodes, setNodes] = useState<Node[]>(() => buildGraph(draft))
+  const [selected, setSelected] = useState<Node<NodeData> | null>(null)
+
+  // Keep positions while draft data changes; rebuild only if structure changes
+  const savedPositions = useMemo(() => {
+    const m: Record<string, { x: number; y: number }> = {}
+    for (const n of nodes) m[n.id] = n.position
+    return m
+  }, [nodes])
+
+  // Rebuild when draft structure changes (capabilities added/removed, etc.)
+  const freshNodes = useMemo(() => {
+    return buildGraph(draft).map(n => ({
+      ...n,
+      position: savedPositions[n.id] ?? n.position,
+    }))
+  }, [draft, savedPositions])
+
+  const onNodesChange = useCallback((changes: NodeChange[]) => {
+    setNodes(ns =>
+      ns.map(n => {
+        const change = changes.find(c => c.type === 'position' && c.id === n.id) as
+          | (NodeChange & { position: { x: number; y: number } })
+          | undefined
+        if (change?.position) {
+          return { ...n, position: change.position }
+        }
+        return n
+      })
+    )
+  }, [])
+
+  const onNodeClick = useCallback((_evt: unknown, node: Node<NodeData>) => {
+    setSelected(prev => prev?.id === node.id ? null : node)
+  }, [])
+
+  // Sync position updates back into the working node list
+  const internalNodes = useMemo(() => {
+    return freshNodes.map(n => {
+      const pos = savedPositions[n.id]
+      return pos ? { ...n, position: pos } : n
+    })
+  }, [freshNodes, savedPositions])
 
   return (
-    <div className="agent-graph">
-      <ReactFlow
-        nodes={nodes}
-        edges={edges}
-        fitView
-        proOptions={{ hideAttribution: true }}
-        nodesConnectable={false}
-        edgesFocusable={false}
-      >
-        <Background color="#e6e9f0" gap={18} />
-        <MiniMap pannable zoomable />
-        <Controls showInteractive={false} />
-      </ReactFlow>
+    <div className="agent-graph-wrap">
+      <div className="agent-graph-hint">Click a node to edit · Drag to reposition</div>
+      <div className="agent-graph">
+        <ReactFlow
+          nodes={internalNodes}
+          edges={[]}
+          fitView
+          fitViewOptions={{ padding: 0.3 }}
+          proOptions={{ hideAttribution: true }}
+          nodesConnectable={false}
+          onNodesChange={onNodesChange}
+          onNodeClick={onNodeClick}
+          minZoom={0.3}
+          maxZoom={2}
+        >
+          <Background color="#d8dde8" gap={20} />
+          <MiniMap pannable zoomable nodeColor={n => {
+            const k = (n.data as NodeData).kind as keyof typeof COLORS
+            return COLORS[k]?.border ?? '#888'
+          }} />
+          <Controls showInteractive={false} />
+        </ReactFlow>
+      </div>
+      {selected && (
+        <div className="graph-detail-overlay">
+          <GraphDetailPanel
+            node={selected}
+            draft={draft}
+            onChange={onDraftChange}
+            onClose={() => setSelected(null)}
+          />
+        </div>
+      )}
     </div>
   )
 }

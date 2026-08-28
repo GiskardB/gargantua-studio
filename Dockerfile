@@ -21,7 +21,7 @@ RUN npm run build   # → /fe/dist
 FROM maven:3.9-eclipse-temurin-25-alpine AS agentcore
 WORKDIR /ac
 COPY --from=runtime_src . .
-RUN mvn -q -N install && mvn -q -pl agent-core install -DskipTests
+RUN mvn -q -N install && mvn -q -pl agent-core,agent-bundle install -DskipTests
 
 # 3) Build the backend jar, with the SPA baked into its static resources.
 FROM maven:3.9-eclipse-temurin-25-alpine AS builder

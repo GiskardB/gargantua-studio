@@ -14,7 +14,6 @@ const NAV: NavItem[] = [
   { to: '/workload', label: 'Workload Designer', group: 'Design' },
   { to: '/agent', label: 'Agent Designer', group: 'Design', live: true },
   { to: '/skill', label: 'Skill Designer', group: 'Design', live: true },
-  { to: '/capability', label: 'Capability Designer', group: 'Design' },
   { to: '/playground', label: 'Playground', group: 'Test' },
   { to: '/trace', label: 'Trace Explorer', group: 'Test' },
   { to: '/evaluation', label: 'Evaluation Studio', group: 'Test' },
@@ -41,6 +40,21 @@ function ConnectivityPill() {
   )
 }
 
+// Clicking through to /control-plane is the "verify what's happening" affordance the
+// pill alone can't give — a dot only says up/down, the page says what's deployed where.
+function ControlPlanePill() {
+  const online = usePlatformStore((s) => s.online)
+  const cpOnline = usePlatformStore((s) => s.cpOnline)
+
+  const state = online === false || cpOnline === null ? 'unknown' : cpOnline ? 'online' : 'offline'
+  const tone = state === 'unknown' ? 'neutral' : state === 'online' ? 'good' : 'bad'
+  return (
+    <NavLink to="/control-plane" className={`conn-pill ${tone}`} title="Control Plane connectivity — click for status">
+      <span className="conn-dot" /> control plane: {state}
+    </NavLink>
+  )
+}
+
 export function Layout() {
   const groups = [...new Set(NAV.map((n) => n.group))]
 
@@ -55,6 +69,7 @@ export function Layout() {
         </div>
         <div className="topbar-right">
           <ConnectivityPill />
+          <ControlPlanePill />
           <span className="env-pill">
             tenant: <strong>acme-bank</strong> · prod
           </span>

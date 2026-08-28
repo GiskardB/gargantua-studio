@@ -11,3 +11,10 @@ CREATE TABLE IF NOT EXISTS studio_settings (
     k VARCHAR(64) PRIMARY KEY,
     v VARCHAR(10000) NOT NULL
 );
+
+-- One JSON document per skill draft. Same portable (id, doc) shape as studio_draft —
+-- a skill is not published to the Registry, but it is durable editing state.
+CREATE TABLE IF NOT EXISTS studio_skill (
+    id  VARCHAR(64) PRIMARY KEY,
+    doc VARCHAR(1000000) NOT NULL
+);
