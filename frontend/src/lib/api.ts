@@ -262,7 +262,10 @@ async function runtimeRequest<T>(base: string, path: string, init?: RequestInit)
   const text = await res.text()
   const body = text ? JSON.parse(text) : null
   if (!res.ok) {
-    throw new Error(`${res.status} ${body?.message ?? body?.error ?? res.statusText}`)
+    // The Runtime reports errors as RFC 7807 problem+json (`detail`/`title`), not the
+    // Studio backend's `message`/`error` shape — check both so a real reason surfaces
+    // instead of a bare status code.
+    throw new Error(`${res.status} ${body?.detail ?? body?.title ?? body?.message ?? body?.error ?? res.statusText}`)
   }
   return body as T
 }

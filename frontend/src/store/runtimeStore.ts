@@ -5,7 +5,15 @@
 import { create } from 'zustand'
 
 const KEY = 'gargantua.runtimeUrl'
-const DEFAULT = 'http://localhost:18100'
+const RUNTIME_PORT = 18100
+
+// The runtime is exposed on the same host Studio itself was reached on — a hardcoded
+// "localhost" only works when the browser and the Docker host are the same machine, which
+// is false the moment Studio is opened from a LAN address or a phone. Match whatever host
+// got the page loaded instead.
+export function defaultRuntimeUrl(): string {
+  return `${window.location.protocol}//${window.location.hostname}:${RUNTIME_PORT}`
+}
 
 interface RuntimeState {
   runtimeUrl: string
@@ -13,7 +21,7 @@ interface RuntimeState {
 }
 
 export const useRuntimeStore = create<RuntimeState>((set) => ({
-  runtimeUrl: localStorage.getItem(KEY) ?? DEFAULT,
+  runtimeUrl: localStorage.getItem(KEY) ?? defaultRuntimeUrl(),
   setRuntimeUrl: (url) => {
     localStorage.setItem(KEY, url)
     set({ runtimeUrl: url })

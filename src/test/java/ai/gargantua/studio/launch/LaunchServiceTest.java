@@ -10,7 +10,11 @@ import static org.mockito.Mockito.when;
 import ai.gargantua.studio.controlplane.ControlPlaneClient;
 import ai.gargantua.studio.launch.LaunchService.LaunchResult;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.sun.net.httpserver.HttpServer;
+import java.io.IOException;
+import java.net.InetSocketAddress;
 import java.util.Optional;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.ResponseEntity;
@@ -19,20 +23,37 @@ class LaunchServiceTest {
 
     private SettingsStore settings;
     private ControlPlaneClient controlPlane;
+    private HttpServer healthServer;
+    private String healthUrl;
 
     @BeforeEach
-    void setUp() {
+    void setUp() throws IOException {
         settings = mock(SettingsStore.class);
         when(settings.get(LaunchService.TEMPLATE_KEY)).thenReturn(Optional.empty());
         controlPlane = mock(ControlPlaneClient.class);
+
+        // A real (loopback-only) HTTP server standing in for the runtime's actuator/health,
+        // so "the launched agent actually answers" can be tested without Docker.
+        healthServer = HttpServer.create(new InetSocketAddress("localhost", 0), 0);
+        healthServer.createContext("/health", exchange -> {
+            exchange.sendResponseHeaders(200, -1);
+            exchange.close();
+        });
+        healthServer.start();
+        healthUrl = "http://localhost:" + healthServer.getAddress().getPort() + "/health";
+    }
+
+    @AfterEach
+    void tearDown() {
+        healthServer.stop(0);
     }
 
     private LaunchService serviceWithTemplate(String template) {
-        return new LaunchService(settings, template, ".", controlPlane, new ObjectMapper());
+        return new LaunchService(settings, template, ".", controlPlane, new ObjectMapper(), healthUrl, 5, 100);
     }
 
     @Test
-    void reportsHealthyDeploymentStateOnSuccessfulLaunch() {
+    void reportsHealthyDeploymentStateOnceTheRuntimeAnswersHealthChecks() {
         when(controlPlane.createDeployment("customer-agent", "1.0.0"))
                 .thenReturn(ResponseEntity.ok("{\"id\":\"dep-1\"}"));
 
@@ -51,6 +72,22 @@ class LaunchServiceTest {
 
         assertThat(result.exitCode()).isNotZero();
         verify(controlPlane).updateDeploymentState("dep-2", "FAILED");
+    }
+
+    @Test
+    void reportsFailedDeploymentStateWhenTheRuntimeNeverBecomesHealthy() {
+        when(controlPlane.createDeployment("customer-agent", "1.0.0"))
+                .thenReturn(ResponseEntity.ok("{\"id\":\"dep-3\"}"));
+        // The docker command itself succeeds ("true"), but nothing is listening at this URL —
+        // the app inside never finished booting. That must still surface as a failed launch,
+        // not a silent HEALTHY that leaves the Playground pointing at a dead agent.
+        LaunchService unhealthy =
+                new LaunchService(settings, "true", ".", controlPlane, new ObjectMapper(), "http://localhost:1", 1, 100);
+
+        LaunchResult result = unhealthy.launch("customer-agent", "1.0.0");
+
+        assertThat(result.exitCode()).isNotZero();
+        verify(controlPlane).updateDeploymentState("dep-3", "FAILED");
     }
 
     @Test

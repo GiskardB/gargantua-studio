@@ -3,7 +3,13 @@ package ai.gargantua.studio.launch;
 import ai.gargantua.studio.controlplane.ControlPlaneClient;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 import org.slf4j.Logger;
@@ -46,18 +52,28 @@ public class LaunchService {
     private final String workdir;
     private final ControlPlaneClient controlPlane;
     private final ObjectMapper mapper;
+    private final String healthUrl;
+    private final Duration healthTimeout;
+    private final Duration healthPollInterval;
+    private final HttpClient httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).build();
 
     public LaunchService(
             SettingsStore settings,
             @Value("${gargantua.launch.command-template}") String defaultTemplate,
             @Value("${gargantua.launch.workdir}") String workdir,
             ControlPlaneClient controlPlane,
-            ObjectMapper mapper) {
+            ObjectMapper mapper,
+            @Value("${gargantua.launch.health-url:http://gargantua-runtime:8080/actuator/health}") String healthUrl,
+            @Value("${gargantua.launch.health-timeout-seconds:90}") long healthTimeoutSeconds,
+            @Value("${gargantua.launch.health-poll-interval-ms:2000}") long healthPollIntervalMs) {
         this.settings = settings;
         this.defaultTemplate = defaultTemplate;
         this.workdir = workdir;
         this.controlPlane = controlPlane;
         this.mapper = mapper;
+        this.healthUrl = healthUrl;
+        this.healthTimeout = Duration.ofSeconds(healthTimeoutSeconds);
+        this.healthPollInterval = Duration.ofMillis(healthPollIntervalMs);
     }
 
     public String commandTemplate() {
@@ -84,8 +100,44 @@ public class LaunchService {
                 .replace("{name}", name)
                 .replace("{version}", version);
         LaunchResult result = run(command);
+        // `docker run -d` returns as soon as the container starts, not once the agent inside
+        // is actually ready — the app can take tens of seconds (slow MCP servers, model
+        // warm-up). Reporting HEALTHY off the docker exit code alone would let the Playground
+        // (and anyone else reading the Control Plane) treat a still-booting agent as reachable.
+        if (result.exitCode() == 0 && !awaitHealthy()) {
+            result = new LaunchResult(-1, result.command(), result.output()
+                    + "\n[runtime did not report healthy within " + healthTimeout.toSeconds() + "s]");
+        }
         reportDeploymentState(deploymentId, result.exitCode() == 0 ? "HEALTHY" : "FAILED");
         return result;
+    }
+
+    private boolean awaitHealthy() {
+        HttpRequest request;
+        try {
+            request = HttpRequest.newBuilder(URI.create(healthUrl)).timeout(Duration.ofSeconds(3)).GET().build();
+        } catch (Exception e) {
+            log.debug("Invalid health-check URL '{}': {}", healthUrl, e.getMessage());
+            return false;
+        }
+        Instant deadline = Instant.now().plus(healthTimeout);
+        while (Instant.now().isBefore(deadline)) {
+            try {
+                HttpResponse<Void> response = httpClient.send(request, HttpResponse.BodyHandlers.discarding());
+                if (response.statusCode() == 200) {
+                    return true;
+                }
+            } catch (Exception e) {
+                // Not up yet (connection refused, reset while Tomcat starts, ...) — keep polling.
+            }
+            try {
+                Thread.sleep(healthPollInterval.toMillis());
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return false;
+            }
+        }
+        return false;
     }
 
     private LaunchResult run(String command) {

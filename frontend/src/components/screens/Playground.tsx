@@ -1,8 +1,9 @@
 import { useRef, useState, useEffect } from 'react'
 import { Screen, Panel, Badge } from '../ui'
-import { useRuntimeStore } from '../../store/runtimeStore'
+import { useRuntimeStore, defaultRuntimeUrl } from '../../store/runtimeStore'
 import { usePlatformStore } from '../../store/platformStore'
 import { runtimeChat, RuntimeOfflineError, type RuntimeChatResponse } from '../../lib/api'
+import { randomId } from '../../lib/randomId'
 
 interface Turn {
   role: 'user' | 'agent'
@@ -38,16 +39,16 @@ export function Playground() {
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
   // Impersonation controls: set roles to test RBAC-gated skills (allowed-roles).
-  const [userId, setUserId] = useState('studio-' + crypto.randomUUID().slice(0, 8))
+  const [userId, setUserId] = useState('studio-' + randomId().slice(0, 8))
   const [roles, setRoles] = useState('')
   // Stable session id so multi-turn memory works within a Playground session.
-  const session = useRef(crypto.randomUUID())
+  const session = useRef(randomId())
   const selected = activeAgents.find((d) => d.id === selectedDeployment)
 
   // Auto-populate runtime URL when an active agent is selected and URL is empty/default
   useEffect(() => {
     if (selected && !runtimeUrl) {
-      setRuntimeUrl('http://localhost:18100')
+      setRuntimeUrl(defaultRuntimeUrl())
     }
   }, [selected, runtimeUrl, setRuntimeUrl])
 
