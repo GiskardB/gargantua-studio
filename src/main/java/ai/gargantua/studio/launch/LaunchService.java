@@ -1,6 +1,7 @@
 package ai.gargantua.studio.launch;
 
 import ai.gargantua.studio.controlplane.ControlPlaneClient;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
 import java.net.URI;
@@ -10,6 +11,7 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
@@ -26,11 +28,14 @@ import org.springframework.stereotype.Service;
  * become {@code kubectl} or anything else without a code change.
  *
  * <p>The runtime cannot hot-swap which agent it serves (ADR-001: one process, one agent,
- * config bound at startup), so "launch" means (re)starting the runtime container pointed
- * at the freshly published bundle. The Control Plane does not execute the launch itself
- * (ADR-004), which is why this lives here rather than there — but Studio, as the executor,
- * reports the observed outcome back to the Control Plane's Deployment record so the rest
- * of the platform (e.g. the Playground) can tell which agent is actually running.
+ * config bound at startup) — but that's a constraint per <em>agent</em>, not a limit of one
+ * runtime total: each agent name gets its own container (named {@code gargantua-runtime-
+ * <name>}) and its own host port, allocated once and reused on every relaunch of that same
+ * agent, so several agents can run — and be chatted with — at the same time. The Control
+ * Plane does not execute the launch itself (ADR-004), which is why this lives here rather
+ * than there — but Studio, as the executor, reports the observed outcome (state and port)
+ * back to the Control Plane's Deployment record so the rest of the platform (e.g. the
+ * Playground) can tell which agents are actually running and where.
  *
  * <p>Security: {@code name}/{@code version} are substituted into a shell command, so they
  * are validated against a strict allow-list first. This endpoint executes arbitrary
@@ -43,6 +48,9 @@ public class LaunchService {
     private static final Logger log = LoggerFactory.getLogger(LaunchService.class);
 
     static final String TEMPLATE_KEY = "launch.command-template";
+    private static final String PORT_MAP_KEY = "launch.port-allocations";
+    /** First port handed out; below this is reserved for the legacy fixed-port compose service. */
+    private static final int PORT_BASE = 18101;
 
     /** Names/versions come from user-editable form fields — keep them shell-safe. */
     private static final Pattern SAFE = Pattern.compile("^[A-Za-z0-9._-]+$");
@@ -56,7 +64,8 @@ public class LaunchService {
     private final String workdir;
     private final ControlPlaneClient controlPlane;
     private final ObjectMapper mapper;
-    private final String healthUrl;
+    /** {name} is substituted per launch — the health endpoint lives on that agent's own container. */
+    private final String healthUrlTemplate;
     private final Duration healthTimeout;
     private final Duration healthPollInterval;
     private final HttpClient httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).build();
@@ -67,7 +76,7 @@ public class LaunchService {
             @Value("${gargantua.launch.workdir}") String workdir,
             ControlPlaneClient controlPlane,
             ObjectMapper mapper,
-            @Value("${gargantua.launch.health-url:http://gargantua-runtime:8080/actuator/health}") String healthUrl,
+            @Value("${gargantua.launch.health-url:http://gargantua-runtime-{name}:8080/actuator/health}") String healthUrlTemplate,
             @Value("${gargantua.launch.health-timeout-seconds:90}") long healthTimeoutSeconds,
             @Value("${gargantua.launch.health-poll-interval-ms:2000}") long healthPollIntervalMs) {
         this.settings = settings;
@@ -75,7 +84,7 @@ public class LaunchService {
         this.workdir = workdir;
         this.controlPlane = controlPlane;
         this.mapper = mapper;
-        this.healthUrl = healthUrl;
+        this.healthUrlTemplate = healthUrlTemplate;
         this.healthTimeout = Duration.ofSeconds(healthTimeoutSeconds);
         this.healthPollInterval = Duration.ofMillis(healthPollIntervalMs);
     }
@@ -114,27 +123,69 @@ public class LaunchService {
             }
         }
         String deploymentId = registerDeployment(name, version);
+        int port = allocatePort(name);
         String envFlags = extraEnv.entrySet().stream()
                 .map(e -> "-e " + e.getKey() + "=" + shellQuote(e.getValue()))
                 .collect(Collectors.joining(" "));
         String command = commandTemplate()
                 .replace("{name}", name)
                 .replace("{version}", version)
-                .replace("{env}", envFlags);
+                .replace("{env}", envFlags)
+                .replace("{port}", String.valueOf(port));
         LaunchResult result = run(command);
         // `docker run -d` returns as soon as the container starts, not once the agent inside
         // is actually ready — the app can take tens of seconds (slow MCP servers, model
         // warm-up). Reporting HEALTHY off the docker exit code alone would let the Playground
         // (and anyone else reading the Control Plane) treat a still-booting agent as reachable.
-        if (result.exitCode() == 0 && !awaitHealthy()) {
+        if (result.exitCode() == 0 && !awaitHealthy(healthUrlTemplate.replace("{name}", name))) {
             result = new LaunchResult(-1, result.command(), result.output()
                     + "\n[runtime did not report healthy within " + healthTimeout.toSeconds() + "s]");
         }
-        reportDeploymentState(deploymentId, result.exitCode() == 0 ? "HEALTHY" : "FAILED");
+        reportDeploymentState(deploymentId, result.exitCode() == 0 ? "HEALTHY" : "FAILED",
+                result.exitCode() == 0 ? port : null);
         return result;
     }
 
-    private boolean awaitHealthy() {
+    /**
+     * Each agent name keeps the same host port across relaunches (persisted via
+     * SettingsStore, the same store the command template lives in) — new names get the next
+     * free one. {@code synchronized} because two brand-new agents launched at once must not
+     * both compute the same "next" port from a stale read.
+     */
+    private synchronized int allocatePort(String name) {
+        Map<String, Integer> ports = loadPortMap();
+        Integer existing = ports.get(name);
+        if (existing != null) {
+            return existing;
+        }
+        int next = ports.values().stream().mapToInt(Integer::intValue).max().orElse(PORT_BASE - 1) + 1;
+        ports.put(name, next);
+        savePortMap(ports);
+        return next;
+    }
+
+    private Map<String, Integer> loadPortMap() {
+        return settings.get(PORT_MAP_KEY)
+                .map(json -> {
+                    try {
+                        return mapper.readValue(json, new TypeReference<Map<String, Integer>>() { });
+                    } catch (Exception e) {
+                        log.warn("Corrupt port allocation table, starting fresh: {}", e.getMessage());
+                        return new LinkedHashMap<String, Integer>();
+                    }
+                })
+                .orElseGet(LinkedHashMap::new);
+    }
+
+    private void savePortMap(Map<String, Integer> ports) {
+        try {
+            settings.put(PORT_MAP_KEY, mapper.writeValueAsString(ports));
+        } catch (Exception e) {
+            log.warn("Could not persist port allocation table", e);
+        }
+    }
+
+    private boolean awaitHealthy(String healthUrl) {
         HttpRequest request;
         try {
             request = HttpRequest.newBuilder(URI.create(healthUrl)).timeout(Duration.ofSeconds(3)).GET().build();
@@ -202,12 +253,12 @@ public class LaunchService {
         }
     }
 
-    private void reportDeploymentState(String deploymentId, String state) {
+    private void reportDeploymentState(String deploymentId, String state, Integer port) {
         if (deploymentId == null) {
             return;
         }
         try {
-            controlPlane.updateDeploymentState(deploymentId, state);
+            controlPlane.updateDeploymentState(deploymentId, state, port);
         } catch (Exception e) {
             log.debug("Could not report deployment {} state {} to the Control Plane", deploymentId, state, e);
         }

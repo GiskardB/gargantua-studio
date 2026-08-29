@@ -26,6 +26,8 @@ export interface DeploymentRow {
   environment: string
   strategy: string
   state: DeploymentState
+  /** Host port this agent's own container answers on, once known — each agent gets its own. */
+  port: number | null
   updatedAt: string
 }
 
@@ -123,6 +125,7 @@ interface CpDeployment {
   environment: string
   strategy: string
   state: DeploymentState
+  port?: number | null
   updatedAt: string
 }
 
@@ -134,6 +137,7 @@ function mapDeployments(raw: unknown[]): DeploymentRow[] {
     environment: d.environment,
     strategy: d.strategy,
     state: d.state,
+    port: d.port ?? null,
     updatedAt: d.updatedAt,
   }))
 }

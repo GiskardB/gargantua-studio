@@ -1,6 +1,7 @@
 package ai.gargantua.studio.controlplane;
 
 import ai.gargantua.studio.common.UpstreamException;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
@@ -124,14 +125,24 @@ public class ControlPlaneClient {
         }
     }
 
-    /** Report the observed state of a deployment after Studio has actually run the launch command. */
-    public ResponseEntity<String> updateDeploymentState(String deploymentId, String state) {
+    /**
+     * Report the observed state of a deployment after Studio has actually run the launch
+     * command, and — once known — the host port that agent is reachable on (null while
+     * still unknown; omitted from the request body rather than sent as a JSON null, so an
+     * unrelated later state change never overwrites a port already on record).
+     */
+    public ResponseEntity<String> updateDeploymentState(String deploymentId, String state, Integer port) {
         try {
+            Map<String, Object> body = new LinkedHashMap<>();
+            body.put("state", state);
+            if (port != null) {
+                body.put("port", port);
+            }
             return client.put()
                     .uri("/api/v1/deployments/{id}/state", deploymentId)
                     .contentType(MediaType.APPLICATION_JSON)
                     .accept(MediaType.APPLICATION_JSON)
-                    .body(Map.of("state", state))
+                    .body(body)
                     .retrieve()
                     .onStatus(HttpStatusCode::isError, (req, res) -> { })
                     .toEntity(String.class);

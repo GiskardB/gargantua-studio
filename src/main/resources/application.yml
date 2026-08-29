@@ -30,10 +30,13 @@ gargantua:
     # the freshly published bundle.
     # {env} is where launch(name, version, env) splices any user-supplied -e KEY=VALUE
     # overrides (see the Launch dialog's environment variable form) — must sit before the
-    # image name, since docker parses `docker run [OPTIONS] IMAGE`.
+    # image name, since docker parses `docker run [OPTIONS] IMAGE`. {port} is this agent's
+    # own host port, allocated once per agent name and reused on relaunch (see
+    # LaunchService#allocatePort) — every agent gets its own container name and port, so
+    # several can run at once instead of each launch replacing whatever was running before.
     command-template: >-
-      docker rm -f gargantua-runtime 2>/dev/null;
-      docker run -d --name gargantua-runtime --network gargantua-compose_default -p 18100:8080
+      docker rm -f gargantua-runtime-{name} 2>/dev/null;
+      docker run -d --name gargantua-runtime-{name} --network gargantua-compose_default -p {port}:8080
       -e GARGANTUA_BUNDLE_URL=http://control-plane:8080/api/v1/registry/bundles/{name}/{version}/bundle
       -e SPRING_PROFILES_ACTIVE=embedded,cave
       {env}

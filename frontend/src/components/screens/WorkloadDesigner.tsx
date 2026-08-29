@@ -153,7 +153,7 @@ export function WorkloadDesigner() {
                     .filter((d) => d.bundleName === w.name && d.bundleVersion === w.version)
                     .map((d) => (
                       <div className="wl-conflict-row" key={d.id}>
-                        <span className="mono">{d.environment} · {d.state}</span>
+                        <span className="mono">{d.environment} · {d.state}{d.port ? ` :${d.port}` : ''}</span>
                         <button
                           className="danger"
                           disabled={undeploying === d.id}

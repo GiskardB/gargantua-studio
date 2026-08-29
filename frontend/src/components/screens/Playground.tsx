@@ -1,6 +1,6 @@
 import { useRef, useState, useEffect } from 'react'
 import { Screen, Panel, Badge } from '../ui'
-import { useRuntimeStore, defaultRuntimeUrl } from '../../store/runtimeStore'
+import { useRuntimeStore, defaultRuntimeUrl, runtimeUrlForPort } from '../../store/runtimeStore'
 import { usePlatformStore } from '../../store/platformStore'
 import { runtimeChat, RuntimeOfflineError, type RuntimeChatResponse } from '../../lib/api'
 import { randomId } from '../../lib/randomId'
@@ -27,11 +27,12 @@ export function Playground() {
 
   // Most published bundles were never launched anywhere — only deployments the Control
   // Plane has actually observed become HEALTHY are worth chatting with. Studio's Launch
-  // action (Workload Designer) reports that state after it runs the launch command.
-  // Most recently launched first, since only one runtime is reachable at a time.
+  // action (Workload Designer) reports that state after it runs the launch command. Each
+  // agent gets its own container and port (LaunchService#allocatePort), so several can be
+  // active at once — sorted by name here just for a stable, readable list.
   const activeAgents = (deployments ?? [])
     .filter((d) => d.state === 'HEALTHY')
-    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+    .sort((a, b) => a.bundleName.localeCompare(b.bundleName))
 
   const [selectedDeployment, setSelectedDeployment] = useState<string>('')
   const [turns, setTurns] = useState<Turn[]>([])
@@ -45,12 +46,14 @@ export function Playground() {
   const session = useRef(randomId())
   const selected = activeAgents.find((d) => d.id === selectedDeployment)
 
-  // Auto-populate runtime URL when an active agent is selected and URL is empty/default
+  // Point the Runtime URL at whichever agent is selected — each concurrently-running agent
+  // has its own port now, so this has to follow the selection, not just fill an empty field
+  // once. Falls back to the legacy fixed port for older deployment records with no port on
+  // file yet.
   useEffect(() => {
-    if (selected && !runtimeUrl) {
-      setRuntimeUrl(defaultRuntimeUrl())
-    }
-  }, [selected, runtimeUrl, setRuntimeUrl])
+    if (!selected) return
+    setRuntimeUrl(selected.port ? runtimeUrlForPort(selected.port) : defaultRuntimeUrl())
+  }, [selected, setRuntimeUrl])
 
   const send = async () => {
     const message = input.trim()
@@ -88,7 +91,7 @@ export function Playground() {
               </option>
               {activeAgents.map((d) => (
                 <option key={d.id} value={d.id}>
-                  {d.bundleName} v{d.bundleVersion} ({d.environment})
+                  {d.bundleName} v{d.bundleVersion} ({d.environment}){d.port ? ` :${d.port}` : ''}
                 </option>
               ))}
             </select>

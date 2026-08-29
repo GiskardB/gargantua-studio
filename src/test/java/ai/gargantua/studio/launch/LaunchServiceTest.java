@@ -3,6 +3,8 @@ package ai.gargantua.studio.launch;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -14,6 +16,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.AfterEach;
@@ -30,12 +33,12 @@ class LaunchServiceTest {
 
     @BeforeEach
     void setUp() throws IOException {
-        settings = mock(SettingsStore.class);
-        when(settings.get(LaunchService.TEMPLATE_KEY)).thenReturn(Optional.empty());
+        settings = inMemorySettings();
         controlPlane = mock(ControlPlaneClient.class);
 
         // A real (loopback-only) HTTP server standing in for the runtime's actuator/health,
-        // so "the launched agent actually answers" can be tested without Docker.
+        // so "the launched agent actually answers" can be tested without Docker. Fixed (no
+        // {name} placeholder) since a single server stands in for every agent in these tests.
         healthServer = HttpServer.create(new InetSocketAddress("localhost", 0), 0);
         healthServer.createContext("/health", exchange -> {
             exchange.sendResponseHeaders(200, -1);
@@ -50,19 +53,31 @@ class LaunchServiceTest {
         healthServer.stop(0);
     }
 
+    /** A real (if trivial) settings store, so port allocation can persist across launch() calls. */
+    private static SettingsStore inMemorySettings() {
+        Map<String, String> backing = new HashMap<>();
+        SettingsStore store = mock(SettingsStore.class);
+        when(store.get(anyString())).thenAnswer(inv -> Optional.ofNullable(backing.get(inv.getArgument(0))));
+        doAnswer(inv -> {
+            backing.put(inv.getArgument(0), inv.getArgument(1));
+            return null;
+        }).when(store).put(anyString(), anyString());
+        return store;
+    }
+
     private LaunchService serviceWithTemplate(String template) {
         return new LaunchService(settings, template, ".", controlPlane, new ObjectMapper(), healthUrl, 5, 100);
     }
 
     @Test
-    void reportsHealthyDeploymentStateOnceTheRuntimeAnswersHealthChecks() {
+    void reportsHealthyDeploymentStateAndItsPortOnceTheRuntimeAnswersHealthChecks() {
         when(controlPlane.createDeployment("customer-agent", "1.0.0"))
                 .thenReturn(ResponseEntity.ok("{\"id\":\"dep-1\"}"));
 
         LaunchResult result = serviceWithTemplate("true").launch("customer-agent", "1.0.0");
 
         assertThat(result.exitCode()).isZero();
-        verify(controlPlane).updateDeploymentState("dep-1", "HEALTHY");
+        verify(controlPlane).updateDeploymentState("dep-1", "HEALTHY", 18101);
     }
 
     @Test
@@ -73,7 +88,7 @@ class LaunchServiceTest {
         LaunchResult result = serviceWithTemplate("false").launch("customer-agent", "1.0.0");
 
         assertThat(result.exitCode()).isNotZero();
-        verify(controlPlane).updateDeploymentState("dep-2", "FAILED");
+        verify(controlPlane).updateDeploymentState("dep-2", "FAILED", null);
     }
 
     @Test
@@ -89,7 +104,7 @@ class LaunchServiceTest {
         LaunchResult result = unhealthy.launch("customer-agent", "1.0.0");
 
         assertThat(result.exitCode()).isNotZero();
-        verify(controlPlane).updateDeploymentState("dep-3", "FAILED");
+        verify(controlPlane).updateDeploymentState("dep-3", "FAILED", null);
     }
 
     @Test
@@ -118,6 +133,30 @@ class LaunchServiceTest {
         LaunchResult result = serviceWithTemplate("true").launch("customer-agent", "1.0.0");
 
         assertThat(result.exitCode()).isZero();
-        verify(controlPlane, never()).updateDeploymentState(any(), any());
+        verify(controlPlane, never()).updateDeploymentState(any(), any(), any());
+    }
+
+    @Test
+    void differentAgentsGetDifferentPortsSoTheyCanRunConcurrently() {
+        when(controlPlane.createDeployment(any(), any())).thenReturn(ResponseEntity.ok("{\"id\":\"dep\"}"));
+        LaunchService service = serviceWithTemplate("true {port}");
+
+        LaunchResult first = service.launch("wellness-coach", "1.0.0");
+        LaunchResult second = service.launch("comedian-agent", "1.0.0");
+
+        assertThat(first.command()).contains("18101");
+        assertThat(second.command()).contains("18102");
+    }
+
+    @Test
+    void relaunchingTheSameAgentReusesItsPort() {
+        when(controlPlane.createDeployment(any(), any())).thenReturn(ResponseEntity.ok("{\"id\":\"dep\"}"));
+        LaunchService service = serviceWithTemplate("true {port}");
+
+        LaunchResult first = service.launch("wellness-coach", "1.0.0");
+        LaunchResult relaunch = service.launch("wellness-coach", "1.1.0");
+
+        assertThat(first.command()).contains("18101");
+        assertThat(relaunch.command()).contains("18101");
     }
 }

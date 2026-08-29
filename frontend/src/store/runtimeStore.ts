@@ -5,14 +5,20 @@
 import { create } from 'zustand'
 
 const KEY = 'gargantua.runtimeUrl'
-const RUNTIME_PORT = 18100
+/** The always-on, single-instance compose demo service (`--profile agent-runtime`) — not
+ *  one of the per-agent ports Studio's Launch dialog hands out (those start at 18101). */
+const LEGACY_FIXED_PORT = 18100
 
 // The runtime is exposed on the same host Studio itself was reached on — a hardcoded
 // "localhost" only works when the browser and the Docker host are the same machine, which
 // is false the moment Studio is opened from a LAN address or a phone. Match whatever host
 // got the page loaded instead.
+export function runtimeUrlForPort(port: number): string {
+  return `${window.location.protocol}//${window.location.hostname}:${port}`
+}
+
 export function defaultRuntimeUrl(): string {
-  return `${window.location.protocol}//${window.location.hostname}:${RUNTIME_PORT}`
+  return runtimeUrlForPort(LEGACY_FIXED_PORT)
 }
 
 interface RuntimeState {
