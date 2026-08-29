@@ -28,11 +28,15 @@ gargantua:
     # `docker run` (works with a remote daemon — no compose file/build-context needed) against
     # a pre-built `gargantua-runtime:local` image, recreating the runtime container pointed at
     # the freshly published bundle.
+    # {env} is where launch(name, version, env) splices any user-supplied -e KEY=VALUE
+    # overrides (see the Launch dialog's environment variable form) — must sit before the
+    # image name, since docker parses `docker run [OPTIONS] IMAGE`.
     command-template: >-
       docker rm -f gargantua-runtime 2>/dev/null;
       docker run -d --name gargantua-runtime --network gargantua-compose_default -p 18100:8080
       -e GARGANTUA_BUNDLE_URL=http://control-plane:8080/api/v1/registry/bundles/{name}/{version}/bundle
       -e SPRING_PROFILES_ACTIVE=embedded,cave
+      {env}
       gargantua-runtime:local
     # Working directory the command runs in (unused by the docker-run default).
     workdir: .

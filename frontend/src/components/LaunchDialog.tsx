@@ -1,6 +1,7 @@
 // Launch dialog: shown from a workload card in the Workload Designer. Displays the
 // exact (editable) command the Control Plane runs to start that bundle on a Runtime,
-// and can trigger the real launch — see the backend's LaunchService.
+// lets you add extra environment variables without hand-editing that command, and can
+// trigger the real launch — see the backend's LaunchService.
 
 import { useEffect, useState } from 'react'
 import { getLaunchCommand, setLaunchCommand, launchAgent, type LaunchResult } from '../lib/api'
@@ -11,12 +12,18 @@ interface Props {
   onClose: () => void
 }
 
+interface EnvRow {
+  key: string
+  value: string
+}
+
 export function LaunchDialog({ name, version, onClose }: Props) {
   const [template, setTemplate] = useState('')
   const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState(false)
   const [state, setState] = useState<{ tone: string; text: string } | null>(null)
   const [result, setResult] = useState<LaunchResult | null>(null)
+  const [envRows, setEnvRows] = useState<EnvRow[]>([])
 
   useEffect(() => {
     getLaunchCommand()
@@ -25,7 +32,11 @@ export function LaunchDialog({ name, version, onClose }: Props) {
       .finally(() => setLoading(false))
   }, [])
 
-  const command = template.replace('{name}', name).replace('{version}', version)
+  const activeEnvRows = envRows.filter((r) => r.key.trim())
+  // Mirrors the backend's substitution (LaunchService) so the preview matches what will
+  // actually run — no shell-quoting shown here, that's an execution detail, not a display one.
+  const envFlags = activeEnvRows.map((r) => `-e ${r.key.trim()}=${r.value}`).join(' ')
+  const command = template.replace('{name}', name).replace('{version}', version).replace('{env}', envFlags)
   const copy = () => void navigator.clipboard?.writeText(command)
 
   const saveTemplate = async () => {
@@ -38,11 +49,17 @@ export function LaunchDialog({ name, version, onClose }: Props) {
     }
   }
 
+  const addEnvRow = () => setEnvRows((rows) => [...rows, { key: '', value: '' }])
+  const updateEnvRow = (i: number, patch: Partial<EnvRow>) =>
+    setEnvRows((rows) => rows.map((r, idx) => (idx === i ? { ...r, ...patch } : r)))
+  const removeEnvRow = (i: number) => setEnvRows((rows) => rows.filter((_, idx) => idx !== i))
+
   const launch = async () => {
     setState({ tone: 'info', text: `Launching ${name}@${version}…` })
     setResult(null)
     try {
-      const r = await launchAgent(name, version)
+      const env = Object.fromEntries(activeEnvRows.map((r) => [r.key.trim(), r.value]))
+      const r = await launchAgent(name, version, env)
       setResult(r)
       setState(
         r.exitCode === 0
@@ -70,12 +87,35 @@ export function LaunchDialog({ name, version, onClose }: Props) {
           ) : editing ? (
             <div className="launch-edit">
               <textarea value={template} onChange={(e) => setTemplate(e.target.value)} rows={4} className="mono" />
-              <p className="field-hint">{'{name}'} and {'{version}'} are substituted (validated).</p>
+              <p className="field-hint">{'{name}'}, {'{version}'} and {'{env}'} are substituted (validated).</p>
               <button className="primary" onClick={saveTemplate}>Save command</button>
             </div>
           ) : (
             <pre className="code sm"><code>{command}</code></pre>
           )}
+
+          <div className="launch-env">
+            <span className="field-label">Environment variables (optional)</span>
+            {envRows.map((row, i) => (
+              <div className="launch-env-row" key={i}>
+                <input
+                  placeholder="KEY"
+                  value={row.key}
+                  onChange={(e) => updateEnvRow(i, { key: e.target.value })}
+                  className="mono"
+                />
+                <input
+                  placeholder="value"
+                  value={row.value}
+                  onChange={(e) => updateEnvRow(i, { value: e.target.value })}
+                  className="mono"
+                />
+                <button className="link danger" onClick={() => removeEnvRow(i)} title="Remove">✕</button>
+              </div>
+            ))}
+            <button className="add" onClick={addEnvRow}>+ Add variable</button>
+          </div>
+
           {state && <div className={`publish-note ${state.tone}`}>{state.text}</div>}
           {result && <pre className="code sm"><code>{result.output || '(no output)'}</code></pre>}
         </div>

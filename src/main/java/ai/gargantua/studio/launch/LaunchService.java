@@ -10,8 +10,10 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -44,6 +46,8 @@ public class LaunchService {
 
     /** Names/versions come from user-editable form fields — keep them shell-safe. */
     private static final Pattern SAFE = Pattern.compile("^[A-Za-z0-9._-]+$");
+    /** POSIX env var name: letters/digits/underscore, not starting with a digit. */
+    private static final Pattern SAFE_ENV_KEY = Pattern.compile("^[A-Za-z_][A-Za-z0-9_]*$");
     private static final int MAX_OUTPUT_CHARS = 8000;
     private static final long TIMEOUT_MINUTES = 5;
 
@@ -89,16 +93,34 @@ public class LaunchService {
     }
 
     public LaunchResult launch(String name, String version) {
+        return launch(name, version, Map.of());
+    }
+
+    /**
+     * @param extraEnv user-supplied {@code -e KEY=VALUE} overrides, spliced into the command
+     *                 wherever the template has a {@code {env}} placeholder (empty string if
+     *                 the template doesn't have one — the launch still proceeds without them).
+     */
+    public LaunchResult launch(String name, String version, Map<String, String> extraEnv) {
         if (name == null || !SAFE.matcher(name).matches()) {
             throw new IllegalArgumentException("invalid agent name: " + name);
         }
         if (version == null || !SAFE.matcher(version).matches()) {
             throw new IllegalArgumentException("invalid agent version: " + version);
         }
+        for (String key : extraEnv.keySet()) {
+            if (!SAFE_ENV_KEY.matcher(key).matches()) {
+                throw new IllegalArgumentException("invalid environment variable name: " + key);
+            }
+        }
         String deploymentId = registerDeployment(name, version);
+        String envFlags = extraEnv.entrySet().stream()
+                .map(e -> "-e " + e.getKey() + "=" + shellQuote(e.getValue()))
+                .collect(Collectors.joining(" "));
         String command = commandTemplate()
                 .replace("{name}", name)
-                .replace("{version}", version);
+                .replace("{version}", version)
+                .replace("{env}", envFlags);
         LaunchResult result = run(command);
         // `docker run -d` returns as soon as the container starts, not once the agent inside
         // is actually ready — the app can take tens of seconds (slow MCP servers, model
@@ -193,5 +215,10 @@ public class LaunchService {
 
     private static String cap(String s) {
         return s.length() <= MAX_OUTPUT_CHARS ? s : s.substring(s.length() - MAX_OUTPUT_CHARS);
+    }
+
+    /** Single-quotes a value for {@code sh -c}, escaping embedded single quotes POSIX-style. */
+    private static String shellQuote(String value) {
+        return "'" + (value == null ? "" : value.replace("'", "'\\''")) + "'";
     }
 }

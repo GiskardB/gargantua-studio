@@ -38,14 +38,25 @@ public class LaunchController {
         return Map.of("template", launch.commandTemplate());
     }
 
-    /** Launch (or relaunch) the runtime for a published bundle. 400 if name/version are unsafe. */
+    /**
+     * Launch (or relaunch) the runtime for a published bundle. {@code env} is optional,
+     * user-supplied {@code -e KEY=VALUE} overrides inserted into the command template
+     * wherever it has a {@code {env}} placeholder — see {@link LaunchService}. 400 if
+     * name/version/an env key are unsafe.
+     */
     @PostMapping("/launch")
-    public ResponseEntity<?> launch(@RequestBody Map<String, String> body) {
+    public ResponseEntity<?> launch(@RequestBody LaunchRequest request) {
         try {
-            LaunchResult result = launch.launch(body.get("name"), body.get("version"));
+            LaunchResult result = launch.launch(request.name(), request.version(), request.env());
             return ResponseEntity.ok(result);
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    public record LaunchRequest(String name, String version, Map<String, String> env) {
+        public LaunchRequest {
+            env = env == null ? Map.of() : env;
         }
     }
 }

@@ -53,6 +53,13 @@ export interface SavedDraft {
 /** Raised when the backend cannot be reached — callers treat this as "offline". */
 export class OfflineError extends Error {}
 
+/** Raised on a non-2xx response — carries the real status so callers can branch on it (e.g. 409). */
+export class ApiError extends Error {
+  constructor(public status: number, message: string) {
+    super(message)
+  }
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let res: Response
   try {
@@ -67,7 +74,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const body = text ? JSON.parse(text) : null
   if (!res.ok) {
     const message = body?.message ?? body?.error ?? res.statusText
-    throw new Error(`${res.status} ${message}`)
+    throw new ApiError(res.status, message)
   }
   return body as T
 }
@@ -225,10 +232,11 @@ export function setLaunchCommand(template: string): Promise<{ template: string }
   })
 }
 
-export function launchAgent(name: string, version: string): Promise<LaunchResult> {
+/** `env` overrides are spliced into the command template's `{env}` placeholder as `-e KEY=VALUE`. */
+export function launchAgent(name: string, version: string, env: Record<string, string> = {}): Promise<LaunchResult> {
   return request<LaunchResult>('/api/studio/launch', {
     method: 'POST',
-    body: JSON.stringify({ name, version }),
+    body: JSON.stringify({ name, version, env }),
   })
 }
 
@@ -331,9 +339,14 @@ export function getDeployments(): Promise<unknown[]> {
   return request<unknown[]>('/api/studio/deployments')
 }
 
-/** Delete a published workload version. Rejects (409, via the thrown Error) if still deployed. */
+/** Delete a published workload version. Rejects with an ApiError (status 409) if still deployed. */
 export function deleteWorkload(name: string, version: string): Promise<void> {
   return request<void>(`/api/studio/workloads/${encodeURIComponent(name)}/${encodeURIComponent(version)}`, {
     method: 'DELETE',
   })
+}
+
+/** Clears a deployment record so its bundle version is no longer "still deployed". */
+export function deleteDeployment(id: string): Promise<void> {
+  return request<void>(`/api/studio/deployments/${encodeURIComponent(id)}`, { method: 'DELETE' })
 }

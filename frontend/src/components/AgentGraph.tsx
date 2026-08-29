@@ -10,6 +10,7 @@ import {
   Controls,
   MiniMap,
   ReactFlow,
+  type Edge,
   type Node,
   type NodeChange,
 } from '@xyflow/react'
@@ -23,12 +24,12 @@ import { useSkillsStore } from '../store/skillsStore'
 // ── colours ─────────────────────────────────────────────────────────────────
 
 const COLORS = {
-  agent:     { bg: '#eef3ff', border: '#2f6fed' },
-  model:     { bg: '#fff7e6', border: '#d99a1c' },
-  capability:{ bg: '#eafbf0', border: '#2fa960' },
-  mcp:       { bg: '#eef6ff', border: '#3a86c8' },
-  memory:    { bg: '#f4eefb', border: '#8b5cd6' },
-  knowledge: { bg: '#fdeef4', border: '#c8437f' },
+  agent:     { bg: '#eef3ff', border: '#2f6fed', text: '#1a2233' },
+  model:     { bg: '#fff7e6', border: '#d99a1c', text: '#5a3800' },
+  capability:{ bg: '#eafbf0', border: '#2fa960', text: '#0f3320' },
+  mcp:       { bg: '#eef6ff', border: '#3a86c8', text: '#0f2a44' },
+  memory:    { bg: '#f4eefb', border: '#8b5cd6', text: '#3b1a6b' },
+  knowledge: { bg: '#fdeef4', border: '#c8437f', text: '#5a1030' },
 }
 
 const KIND_LABELS: Record<string, string> = {
@@ -51,17 +52,28 @@ interface NodeData extends Record<string, unknown> {
   enabled?: boolean
 }
 
-function buildGraph(draft: AgentDraft): Node<NodeData>[] {
+interface Satellite {
+  id: string
+  kind: keyof typeof COLORS
+  label: string
+  idx?: number
+  width: number
+  dim?: boolean
+  extra?: Partial<NodeData>
+}
+
+// Every satellite sits on a circle around the agent, connected to it by a straight spoke —
+// a real hub-and-spoke graph instead of loose columns of boxes. This also keeps the whole
+// thing compact regardless of screen size: `fitView` only ever has to fit one bounded
+// circle, not five sprawling columns, which is what made the old layout unreadable on a
+// phone (tiny zoomed-out text, lots of panning, and no edges to show what connects to what).
+function buildGraph(draft: AgentDraft): { nodes: Node<NodeData>[]; edges: Edge[] } {
   const nodes: Node<NodeData>[] = []
-  const c = (x: number, total: number, startY = 0, gap = 70) => {
-    const height = total * gap
-    const offset = 280 + 40 - height / 2
-    return (i: number) => ({ x, y: Math.max(startY, offset) + i * gap })
-  }
+  const edges: Edge[] = []
 
   nodes.push({
     id: 'agent',
-    position: { x: 40, y: 280 },
+    position: { x: 0, y: 0 },
     data: { label: draft.metadata.name || 'agent', version: draft.metadata.version || '0.0.0', kind: 'agent' },
     style: {
       background: COLORS.agent.bg,
@@ -69,81 +81,59 @@ function buildGraph(draft: AgentDraft): Node<NodeData>[] {
       borderRadius: 12,
       fontSize: 13,
       padding: '12px 16px',
-      color: '#1a2233',
+      color: COLORS.agent.text,
       fontWeight: 600,
-      width: 210,
+      width: 200,
+      textAlign: 'center',
       cursor: 'default',
     },
     type: 'default',
     draggable: true,
   })
 
-  const col1 = c(340, Math.max(draft.capabilities.length, draft.mcpServers.length, 1), 60)
-
+  const satellites: Satellite[] = []
   if (draft.model.primary) {
-    nodes.push({
-      id: 'model',
-      position: { x: 340, y: 20 },
-      data: { label: draft.model.primary, kind: 'model' },
-      style: { background: COLORS.model.bg, border: `1px solid ${COLORS.model.border}`, borderRadius: 8, fontSize: 12, padding: '8px 12px', color: '#5a3800', width: 190 },
-      type: 'default',
-      draggable: true,
-    })
+    satellites.push({ id: 'model', kind: 'model', label: draft.model.primary, width: 170 })
   }
+  draft.capabilities.forEach((cap, i) =>
+    satellites.push({ id: `cap-${i}`, kind: 'capability', label: cap.name || `cap-${i + 1}`, idx: i, width: 180 }))
+  draft.mcpServers.forEach((srv, i) =>
+    satellites.push({
+      id: `mcp-${i}`, kind: 'mcp', label: srv.name || `mcp-${i + 1}`, idx: i, width: 180,
+      dim: !srv.enabled, extra: { transport: srv.transport, enabled: srv.enabled },
+    }))
+  draft.memoryLayers.forEach((m, i) =>
+    satellites.push({ id: `mem-${i}`, kind: 'memory', label: m, idx: i, width: 140 }))
+  draft.loadout.knowledge.forEach((k, i) =>
+    satellites.push({ id: `kb-${i}`, kind: 'knowledge', label: k.name || `kb-${i + 1}`, idx: i, width: 160 }))
 
-  draft.capabilities.forEach((cap, i) => {
+  const total = satellites.length
+  const radius = total <= 1 ? 220 : Math.max(240, total * 26)
+  satellites.forEach((s, i) => {
+    const angle = (2 * Math.PI * i) / total - Math.PI / 2
+    const c = COLORS[s.kind]
     nodes.push({
-      id: `cap-${i}`,
-      position: col1(i),
-      data: { label: cap.name || `cap-${i + 1}`, kind: 'capability', idx: i },
-      style: { background: COLORS.capability.bg, border: `1px solid ${COLORS.capability.border}`, borderRadius: 8, fontSize: 12, padding: '8px 12px', color: '#0f3320', width: 200 },
+      id: s.id,
+      position: { x: Math.round(Math.cos(angle) * radius), y: Math.round(Math.sin(angle) * radius) },
+      data: { label: s.label, kind: s.kind, idx: s.idx, ...s.extra },
+      style: {
+        background: c.bg, border: `1px solid ${c.border}`, borderRadius: 8, fontSize: 12,
+        padding: '8px 12px', color: c.text, width: s.width, textAlign: 'center',
+        opacity: s.dim ? 0.55 : 1,
+      },
       type: 'default',
       draggable: true,
     })
-  })
-
-  draft.mcpServers.forEach((srv, i) => {
-    nodes.push({
-      id: `mcp-${i}`,
-      position: col1(draft.capabilities.length + i),
-      data: { label: srv.name || `mcp-${i + 1}`, transport: srv.transport, enabled: srv.enabled, kind: 'mcp', idx: i },
-      style: { background: COLORS.mcp.bg, border: `1px solid ${COLORS.mcp.border}`, borderRadius: 8, fontSize: 12, padding: '8px 12px', color: '#0f2a44', width: 200, opacity: srv.enabled ? 1 : 0.55 },
-      type: 'default',
-      draggable: true,
+    edges.push({
+      id: `e-agent-${s.id}`,
+      source: 'agent',
+      target: s.id,
+      type: 'straight',
+      style: { stroke: c.border, strokeWidth: 1.5 },
     })
   })
 
-  const memCount = draft.memoryLayers.length || 1
-  const memGap = 60
-  const memHeight = memCount * memGap
-  const memOffset = 280 + 40 - memHeight / 2
-  draft.memoryLayers.forEach((m, i) => {
-    nodes.push({
-      id: `mem-${i}`,
-      position: { x: 640, y: Math.max(60, memOffset) + i * memGap },
-      data: { label: m, kind: 'memory', idx: i },
-      style: { background: COLORS.memory.bg, border: `1px solid ${COLORS.memory.border}`, borderRadius: 8, fontSize: 12, padding: '8px 12px', color: '#3b1a6b', width: 160 },
-      type: 'default',
-      draggable: true,
-    })
-  })
-
-  const kbCount = draft.loadout.knowledge.length || 1
-  const kbGap = 60
-  const kbHeight = kbCount * kbGap
-  const kbOffset = 280 + 40 - kbHeight / 2
-  draft.loadout.knowledge.forEach((k, i) => {
-    nodes.push({
-      id: `kb-${i}`,
-      position: { x: 870, y: Math.max(60, kbOffset) + i * kbGap },
-      data: { label: k.name || `kb-${i + 1}`, kind: 'knowledge', idx: i },
-      style: { background: COLORS.knowledge.bg, border: `1px solid ${COLORS.knowledge.border}`, borderRadius: 8, fontSize: 12, padding: '8px 12px', color: '#5a1030', width: 180 },
-      type: 'default',
-      draggable: true,
-    })
-  })
-
-  return nodes
+  return { nodes, edges }
 }
 
 // ── detail panel ─────────────────────────────────────────────────────────────
@@ -332,7 +322,7 @@ export function AgentGraph({
   onDraftChange: (d: AgentDraft) => void
   editingExisting?: boolean
 }) {
-  const [nodes, setNodes] = useState<Node[]>(() => buildGraph(draft))
+  const [nodes, setNodes] = useState<Node[]>(() => buildGraph(draft).nodes)
   const [selected, setSelected] = useState<Node<NodeData> | null>(null)
 
   // Keep positions while draft data changes; rebuild only if structure changes
@@ -342,13 +332,17 @@ export function AgentGraph({
     return m
   }, [nodes])
 
+  // Edges have no position of their own — they just follow whichever node they're
+  // attached to — so they don't need the same position-preservation dance as nodes.
+  const built = useMemo(() => buildGraph(draft), [draft])
+
   // Rebuild when draft structure changes (capabilities added/removed, etc.)
   const freshNodes = useMemo(() => {
-    return buildGraph(draft).map(n => ({
+    return built.nodes.map(n => ({
       ...n,
       position: savedPositions[n.id] ?? n.position,
     }))
-  }, [draft, savedPositions])
+  }, [built.nodes, savedPositions])
 
   const onNodesChange = useCallback((changes: NodeChange[]) => {
     setNodes(ns =>
@@ -382,7 +376,7 @@ export function AgentGraph({
       <div className="agent-graph">
         <ReactFlow
           nodes={internalNodes}
-          edges={[]}
+          edges={built.edges}
           fitView
           fitViewOptions={{ padding: 0.3 }}
           proOptions={{ hideAttribution: true }}

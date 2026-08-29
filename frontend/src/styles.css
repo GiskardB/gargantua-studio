@@ -226,6 +226,10 @@ textarea { resize: vertical; }
 .wl-updated { font-size: 11px; color: var(--fg-mute); }
 .wl-actions { display: flex; align-items: center; gap: 6px; }
 .wl-actions button { padding: 4px 9px; font-size: 12px; }
+.wl-conflict { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--red-soft); display: flex; flex-direction: column; gap: 6px; }
+.wl-conflict .field-hint { color: var(--red); margin: 0; }
+.wl-conflict-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; }
+.wl-conflict-row button { padding: 3px 8px; font-size: 11px; }
 
 /* ---- capability detail ---- */
 .detail { padding: 14px; display: flex; flex-direction: column; gap: 10px; }
@@ -376,6 +380,10 @@ textarea { resize: vertical; }
 .launch-edit { display: flex; flex-direction: column; gap: 6px; }
 .launch-edit textarea { font-size: 11.5px; background: #12141d; color: #e6e8f0; border-color: var(--code-line); }
 .launch-edit .field-hint { color: #8b93a5; }
+
+.launch-env { display: flex; flex-direction: column; gap: 6px; margin-top: 14px; }
+.launch-env-row { display: flex; gap: 6px; align-items: center; }
+.launch-env-row input { flex: 1; min-width: 0; }
 
 /* publish result note under the preview header */
 .publish-note { font-size: 12px; padding: 8px 14px; border-bottom: 1px solid var(--line); }
@@ -569,6 +577,10 @@ textarea { resize: vertical; }
 
   .publish-dialog, .graph-detail { width: min(480px, 92vw); padding: 20px; }
   .publish-dialog-actions, .launch-panel .launch-actions { flex-wrap: wrap; }
+
+  /* The minimap eats a big chunk of an already-small canvas; the zoom/fit controls
+     (kept) are enough to navigate the now-compact radial layout on a phone. */
+  .react-flow__minimap { display: none; }
 
   .detail-row { flex-direction: column; gap: 2px; }
   .detail-k { width: auto; }

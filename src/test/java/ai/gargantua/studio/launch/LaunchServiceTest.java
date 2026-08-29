@@ -1,6 +1,7 @@
 package ai.gargantua.studio.launch;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -13,6 +14,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -88,6 +90,25 @@ class LaunchServiceTest {
 
         assertThat(result.exitCode()).isNotZero();
         verify(controlPlane).updateDeploymentState("dep-3", "FAILED");
+    }
+
+    @Test
+    void splicesExtraEnvVarsIntoTheCommandAtTheEnvPlaceholder() {
+        when(controlPlane.createDeployment("customer-agent", "1.0.0"))
+                .thenReturn(ResponseEntity.ok("{\"id\":\"dep-4\"}"));
+
+        LaunchResult result = serviceWithTemplate("true {env}")
+                .launch("customer-agent", "1.0.0", Map.of("FOO", "bar's value"));
+
+        assertThat(result.exitCode()).isZero();
+        assertThat(result.command()).contains("-e FOO='bar'\\''s value'");
+    }
+
+    @Test
+    void rejectsAnInvalidEnvironmentVariableName() {
+        assertThatThrownBy(() ->
+                serviceWithTemplate("true {env}").launch("customer-agent", "1.0.0", Map.of("not valid!", "x")))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test

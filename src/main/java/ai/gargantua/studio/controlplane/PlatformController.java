@@ -56,4 +56,10 @@ public class PlatformController {
     public ResponseEntity<String> deleteWorkload(@PathVariable String name, @PathVariable String version) {
         return controlPlane.delete("/api/v1/registry/bundles/" + name + "/" + version);
     }
+
+    /** Clears a deployment record, unblocking a workload delete that 409'd on "still deployed". */
+    @DeleteMapping("/deployments/{id}")
+    public ResponseEntity<String> deleteDeployment(@PathVariable String id) {
+        return controlPlane.delete("/api/v1/deployments/" + id);
+    }
 }
