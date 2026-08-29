@@ -268,8 +268,8 @@ textarea { resize: vertical; }
 .intent-to { color: var(--fg-mute); font-size: 12px; }
 
 /* ---- agent designer screen ---- */
-.agent-split { display: grid; grid-template-columns: 1fr 460px; gap: 18px; align-items: start; }
-.agent-split.preview-collapsed { grid-template-columns: 1fr auto; }
+.agent-split { display: grid; grid-template-columns: minmax(0, 1fr) 460px; gap: 18px; align-items: start; }
+.agent-split.preview-collapsed { grid-template-columns: minmax(0, 1fr) auto; }
 .agent-editor { min-width: 0; }
 .agent-preview { position: sticky; top: 0; height: calc(100vh - 52px - 55px - 40px); }
 .preview-collapsed-rail { position: sticky; top: 0; display: flex; align-items: flex-start; padding-top: 4px; }
@@ -288,8 +288,11 @@ textarea { resize: vertical; }
 .section-head .hint { margin: 3px 0 0; font-size: 12px; color: var(--fg-dim); }
 .section-body { padding: 14px; display: flex; flex-direction: column; gap: 12px; }
 .grid { display: grid; gap: 12px; }
-.grid.two { grid-template-columns: 1fr 1fr; }
-.grid.three { grid-template-columns: 1fr 1fr 1fr; }
+/* minmax(0, 1fr), not bare 1fr: a plain 1fr track won't shrink below its content's
+   intrinsic width (inputs/mono text default to a fairly wide min-content size), which
+   was pushing the whole form past the viewport on narrow screens ("grid blowout"). */
+.grid.two { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.grid.three { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr); }
 .field { display: flex; flex-direction: column; gap: 4px; }
 .field-label { font-size: 12px; color: var(--fg-dim); }
 .field-label .req { color: var(--red); }
@@ -343,7 +346,7 @@ textarea { resize: vertical; }
 .preview .preview-head button.primary { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff; border-color: transparent; }
 
 @media (max-width: 1200px) {
-  .agent-split { grid-template-columns: 1fr; }
+  .agent-split { grid-template-columns: minmax(0, 1fr); }
   .agent-preview { position: static; height: 70vh; }
   .split-2, .split-sidebar { grid-template-columns: 1fr; }
   .statrow { grid-template-columns: repeat(2, 1fr); }
@@ -529,7 +532,7 @@ textarea { resize: vertical; }
 .editor-loading { display: grid; place-items: center; height: 100%; font-size: 12px; color: var(--fg-mute); font-family: var(--mono); }
 
 /* ---- Skill Designer: list + editor + preview, list on the far left ------- */
-.skill-layout { display: grid; grid-template-columns: 200px 1fr 460px; gap: 18px; align-items: start; }
+.skill-layout { display: grid; grid-template-columns: 200px minmax(0, 1fr) 460px; gap: 18px; align-items: start; }
 .skill-list { display: flex; flex-direction: column; gap: 6px; }
 .skill-item { position: relative; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; background: var(--bg); cursor: pointer; }
 .skill-item:hover { border-color: var(--line-2); }
@@ -542,7 +545,7 @@ textarea { resize: vertical; }
 .skill-item-detail ul { margin: 0; padding-left: 16px; }
 
 @media (max-width: 1200px) {
-  .skill-layout { grid-template-columns: 1fr; }
+  .skill-layout { grid-template-columns: minmax(0, 1fr); }
   .skill-list { flex-direction: row; flex-wrap: wrap; }
 }
 
@@ -568,7 +571,7 @@ textarea { resize: vertical; }
   .screen-body { padding: 16px; }
   .pg-controls, .tabs { max-width: 100%; }
 
-  .grid.two, .grid.three { grid-template-columns: 1fr; }
+  .grid.two, .grid.three { grid-template-columns: minmax(0, 1fr); }
 
   .cardgrid { grid-template-columns: 1fr; }
 
@@ -577,6 +580,9 @@ textarea { resize: vertical; }
 
   .publish-dialog, .graph-detail { width: min(480px, 92vw); padding: 20px; }
   .publish-dialog-actions, .launch-panel .launch-actions { flex-wrap: wrap; }
+
+  .preview-head { flex-wrap: wrap; row-gap: 8px; }
+  .preview-actions { flex-wrap: wrap; max-width: 100%; }
 
   /* The minimap eats a big chunk of an already-small canvas; the zoom/fit controls
      (kept) are enough to navigate the now-compact radial layout on a phone. */
