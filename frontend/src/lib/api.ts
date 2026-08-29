@@ -350,3 +350,49 @@ export function deleteWorkload(name: string, version: string): Promise<void> {
 export function deleteDeployment(id: string): Promise<void> {
   return request<void>(`/api/studio/deployments/${encodeURIComponent(id)}`, { method: 'DELETE' })
 }
+
+// ---- Control Plane connections (Settings) ------------------------------------
+// Studio can be pointed at more than one Control Plane — one config per deploy
+// environment. Every read/publish/launch call above goes through whichever one
+// `activateControlPlane` last selected; there's no per-call "which one" parameter.
+
+export interface ControlPlaneConfig {
+  id: string
+  name: string
+  baseUrl: string
+  active: boolean
+}
+
+export function listControlPlanes(): Promise<ControlPlaneConfig[]> {
+  return request<ControlPlaneConfig[]>('/api/studio/control-planes')
+}
+
+export function createControlPlane(name: string, baseUrl: string): Promise<ControlPlaneConfig> {
+  return request<ControlPlaneConfig>('/api/studio/control-planes', {
+    method: 'POST',
+    body: JSON.stringify({ name, baseUrl }),
+  })
+}
+
+export function updateControlPlane(id: string, name: string, baseUrl: string): Promise<ControlPlaneConfig> {
+  return request<ControlPlaneConfig>(`/api/studio/control-planes/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    body: JSON.stringify({ name, baseUrl }),
+  })
+}
+
+export function deleteControlPlane(id: string): Promise<void> {
+  return request<void>(`/api/studio/control-planes/${encodeURIComponent(id)}`, { method: 'DELETE' })
+}
+
+/** Makes this the Control Plane every Studio call resolves against, from now on. */
+export function activateControlPlane(id: string): Promise<ControlPlaneConfig> {
+  return request<ControlPlaneConfig>(`/api/studio/control-planes/${encodeURIComponent(id)}/activate`, {
+    method: 'POST',
+  })
+}
+
+/** Disconnects — configs stay on record, but nothing is active until you connect one again. */
+export function deactivateControlPlane(): Promise<void> {
+  return request<void>('/api/studio/control-planes/deactivate', { method: 'POST' })
+}

@@ -15,21 +15,33 @@ import org.springframework.web.client.RestClient;
  * body and status — back to the Studio UI, and only translates a genuine connectivity
  * failure into an {@link UpstreamException} (502). The Studio never owns platform state;
  * it reads it here (ADR-004).
+ *
+ * <p>Every call resolves against {@link ControlPlaneRegistry#activeBaseUrl()} at the
+ * moment it's made, not a URL fixed at startup — so switching the active Control Plane
+ * (Settings) takes effect on the very next call, no restart.
  */
 @Component
 public class ControlPlaneClient {
 
     private final RestClient client;
+    private final ControlPlaneRegistry registry;
 
-    public ControlPlaneClient(RestClient controlPlaneRestClient) {
+    public ControlPlaneClient(RestClient controlPlaneRestClient, ControlPlaneRegistry registry) {
         this.client = controlPlaneRestClient;
+        this.registry = registry;
+    }
+
+    private String url(String path) {
+        return registry.activeBaseUrl()
+                .orElseThrow(() -> new UpstreamException("No Control Plane is connected — pick one in Settings", null))
+                + path;
     }
 
     /** GET a Control Plane resource and relay its JSON response verbatim. */
     public ResponseEntity<String> get(String path) {
         try {
             return client.get()
-                    .uri(path)
+                    .uri(url(path))
                     .accept(MediaType.APPLICATION_JSON)
                     .retrieve()
                     .onStatus(HttpStatusCode::isError, (req, res) -> { })
@@ -43,7 +55,7 @@ public class ControlPlaneClient {
     public ResponseEntity<String> getText(String path) {
         try {
             return client.get()
-                    .uri(path)
+                    .uri(url(path))
                     .accept(MediaType.ALL)
                     .retrieve()
                     .onStatus(HttpStatusCode::isError, (req, res) -> { })
@@ -57,7 +69,7 @@ public class ControlPlaneClient {
     public ResponseEntity<String> delete(String path) {
         try {
             return client.delete()
-                    .uri(path)
+                    .uri(url(path))
                     .accept(MediaType.APPLICATION_JSON)
                     .retrieve()
                     .onStatus(HttpStatusCode::isError, (req, res) -> { })
@@ -87,7 +99,7 @@ public class ControlPlaneClient {
             String manifestYaml, Map<String, String> skillFiles, Map<String, Map<String, String>> skillReferenceFiles) {
         try {
             return client.post()
-                    .uri("/api/v1/registry/bundles")
+                    .uri(url("/api/v1/registry/bundles"))
                     .contentType(MediaType.APPLICATION_JSON)
                     .accept(MediaType.APPLICATION_JSON)
                     .body(Map.of(
@@ -110,7 +122,7 @@ public class ControlPlaneClient {
     public ResponseEntity<String> createDeployment(String bundleName, String bundleVersion) {
         try {
             return client.post()
-                    .uri("/api/v1/deployments")
+                    .uri(url("/api/v1/deployments"))
                     .contentType(MediaType.APPLICATION_JSON)
                     .accept(MediaType.APPLICATION_JSON)
                     .body(Map.of(
@@ -139,7 +151,7 @@ public class ControlPlaneClient {
                 body.put("port", port);
             }
             return client.put()
-                    .uri("/api/v1/deployments/{id}/state", deploymentId)
+                    .uri(url("/api/v1/deployments/{id}/state"), deploymentId)
                     .contentType(MediaType.APPLICATION_JSON)
                     .accept(MediaType.APPLICATION_JSON)
                     .body(body)

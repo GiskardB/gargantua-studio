@@ -19,6 +19,8 @@ const NAV: NavItem[] = [
   { to: '/evaluation', label: 'Evaluation Studio', group: 'Test' },
   { to: '/gateway', label: 'Gateway Designer', group: 'Govern' },
   { to: '/security', label: 'Security Designer', group: 'Govern' },
+  { to: '/control-plane', label: 'Control Plane Status', group: 'System' },
+  { to: '/settings', label: 'Settings', group: 'System' },
 ]
 
 function ConnectivityPill() {

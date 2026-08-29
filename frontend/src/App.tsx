@@ -9,6 +9,7 @@ import { EvaluationStudio } from './components/screens/EvaluationStudio'
 import { GatewayDesigner } from './components/screens/GatewayDesigner'
 import { SecurityDesigner } from './components/screens/SecurityDesigner'
 import { ControlPlaneStatus } from './components/screens/ControlPlaneStatus'
+import { SettingsScreen } from './components/screens/SettingsScreen'
 
 // React Router drives navigation; the draft and platform state live in Zustand stores,
 // so screens no longer prop-drill. The Agent Designer is the default landing screen.
@@ -26,6 +27,7 @@ export default function App() {
         <Route path="/gateway" element={<GatewayDesigner />} />
         <Route path="/security" element={<SecurityDesigner />} />
         <Route path="/control-plane" element={<ControlPlaneStatus />} />
+        <Route path="/settings" element={<SettingsScreen />} />
         <Route path="*" element={<Navigate to="/agent" replace />} />
       </Route>
     </Routes>

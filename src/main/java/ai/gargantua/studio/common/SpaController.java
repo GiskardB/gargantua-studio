@@ -8,57 +8,20 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.io.IOException;
 
-/** Serve the bundled SPA for React Router routes. */
+/**
+ * Serve the bundled SPA for React Router routes. A catch-all instead of one mapping per
+ * route: an enumerated list silently 500s on every new client-side route until someone
+ * remembers to add it here (it already had, e.g. {@code /control-plane} was missing).
+ * The {@code [^.]*} guard excludes paths with a dot so real static assets (js/css/etc.)
+ * still fall through to the resource handler. Single path segment only — every current
+ * client-side route is top-level; a wildcard suffix would also swallow nested asset
+ * paths like {@code /assets/app.js}, since browsers send a wildcard Accept header.
+ */
 @RestController
 public class SpaController {
 
-    @GetMapping(value = "/", produces = MediaType.TEXT_HTML_VALUE)
-    public ResponseEntity<byte[]> root() throws IOException {
-        return serveIndex();
-    }
-
-    @GetMapping(value = "/agent", produces = MediaType.TEXT_HTML_VALUE)
-    public ResponseEntity<byte[]> agent() throws IOException {
-        return serveIndex();
-    }
-
-    @GetMapping(value = "/skill", produces = MediaType.TEXT_HTML_VALUE)
-    public ResponseEntity<byte[]> skill() throws IOException {
-        return serveIndex();
-    }
-
-    @GetMapping(value = "/workload", produces = MediaType.TEXT_HTML_VALUE)
-    public ResponseEntity<byte[]> workload() throws IOException {
-        return serveIndex();
-    }
-
-    @GetMapping(value = "/capability", produces = MediaType.TEXT_HTML_VALUE)
-    public ResponseEntity<byte[]> capability() throws IOException {
-        return serveIndex();
-    }
-
-    @GetMapping(value = "/playground", produces = MediaType.TEXT_HTML_VALUE)
-    public ResponseEntity<byte[]> playground() throws IOException {
-        return serveIndex();
-    }
-
-    @GetMapping(value = "/trace", produces = MediaType.TEXT_HTML_VALUE)
-    public ResponseEntity<byte[]> trace() throws IOException {
-        return serveIndex();
-    }
-
-    @GetMapping(value = "/evaluation", produces = MediaType.TEXT_HTML_VALUE)
-    public ResponseEntity<byte[]> evaluation() throws IOException {
-        return serveIndex();
-    }
-
-    @GetMapping(value = "/gateway", produces = MediaType.TEXT_HTML_VALUE)
-    public ResponseEntity<byte[]> gateway() throws IOException {
-        return serveIndex();
-    }
-
-    @GetMapping(value = "/security", produces = MediaType.TEXT_HTML_VALUE)
-    public ResponseEntity<byte[]> security() throws IOException {
+    @GetMapping(value = {"/", "/{path:[^.]*}"}, produces = MediaType.TEXT_HTML_VALUE)
+    public ResponseEntity<byte[]> spa() throws IOException {
         return serveIndex();
     }
 

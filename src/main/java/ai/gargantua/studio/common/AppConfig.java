@@ -6,7 +6,6 @@ import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.json.JsonMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import java.time.Clock;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
@@ -42,13 +41,14 @@ public class AppConfig {
     }
 
     /**
-     * Client for the Control Plane API. The base URL points at the Control Plane the
-     * Studio serves; in Cave the two run side by side, so it defaults to localhost.
+     * Client for the Control Plane API. No base URL baked in on purpose: Studio can be
+     * pointed at more than one Control Plane (see {@code ControlPlaneRegistry}), switchable
+     * at runtime, so {@code ControlPlaneClient} resolves the full URL itself on every call
+     * against whichever one is currently active.
      */
     @Bean
-    public RestClient controlPlaneRestClient(
-            @Value("${gargantua.control-plane.base-url:http://localhost:8080}") String baseUrl) {
-        return RestClient.builder().baseUrl(baseUrl).build();
+    public RestClient controlPlaneRestClient() {
+        return RestClient.builder().build();
     }
 
     @Bean
