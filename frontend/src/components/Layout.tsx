@@ -1,5 +1,5 @@
-import { useEffect } from 'react'
-import { NavLink, Outlet } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { usePlatformStore } from '../store/platformStore'
 
 interface NavItem {
@@ -35,7 +35,7 @@ function ConnectivityPill() {
   const tone = online === null ? 'neutral' : online ? 'good' : 'bad'
   return (
     <span className={`conn-pill ${tone}`} title="Studio backend connectivity">
-      <span className="conn-dot" /> {state}
+      <span className="conn-dot" /> <span className="conn-label">{state}</span>
     </span>
   )
 }
@@ -50,22 +50,40 @@ function ControlPlanePill() {
   const tone = state === 'unknown' ? 'neutral' : state === 'online' ? 'good' : 'bad'
   return (
     <NavLink to="/control-plane" className={`conn-pill ${tone}`} title="Control Plane connectivity — click for status">
-      <span className="conn-dot" /> control plane: {state}
+      <span className="conn-dot" /> <span className="conn-label">control plane: {state}</span>
     </NavLink>
   )
 }
 
 export function Layout() {
   const groups = [...new Set(NAV.map((n) => n.group))]
+  // Below the mobile breakpoint the rail becomes an off-canvas drawer, toggled by the
+  // hamburger button (hidden on wider screens, where the rail is always visible).
+  const [navOpen, setNavOpen] = useState(false)
+  const location = useLocation()
+
+  useEffect(() => {
+    setNavOpen(false)
+  }, [location.pathname])
 
   return (
     <div className="app">
       <header className="topbar">
-        <div className="brand">
-          <span className="logo">▰</span>
-          <span>
-            Gargantua <strong>Studio</strong>
-          </span>
+        <div className="topbar-left">
+          <button
+            className="hamburger"
+            onClick={() => setNavOpen((v) => !v)}
+            aria-label={navOpen ? 'Close navigation' : 'Open navigation'}
+            aria-expanded={navOpen}
+          >
+            ☰
+          </button>
+          <div className="brand">
+            <span className="logo">▰</span>
+            <span>
+              Gargantua <strong>Studio</strong>
+            </span>
+          </div>
         </div>
         <div className="topbar-right">
           <ConnectivityPill />
@@ -78,7 +96,8 @@ export function Layout() {
       </header>
 
       <div className="layout">
-        <nav className="rail">
+        {navOpen && <div className="rail-backdrop" onClick={() => setNavOpen(false)} />}
+        <nav className={navOpen ? 'rail open' : 'rail'}>
           {groups.map((g) => (
             <div className="rail-group" key={g}>
               <div className="rail-group-title">{g}</div>

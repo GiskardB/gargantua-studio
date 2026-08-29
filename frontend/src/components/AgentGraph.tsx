@@ -14,9 +14,11 @@ import {
   type NodeChange,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import type { AgentDraft, CapabilityDraft, McpServerDraft, KnowledgeRefDraft } from '../types/draft'
+import type { AgentDraft, McpServerDraft, KnowledgeRefDraft } from '../types/draft'
+import { applySkillToCapability } from '../types/draft'
 import { MEMORY_LAYERS, type MemoryLayer } from '../types/manifest'
 import { Field, TextInput, TextArea, Select, Checkbox } from './fields'
+import { useSkillsStore } from '../store/skillsStore'
 
 // ── colours ─────────────────────────────────────────────────────────────────
 
@@ -147,22 +149,30 @@ function buildGraph(draft: AgentDraft): Node<NodeData>[] {
 // ── detail panel ─────────────────────────────────────────────────────────────
 
 function GraphDetailPanel({
-  node, draft, onChange, onClose,
+  node, draft, onChange, onClose, editingExisting,
 }: {
   node: Node<NodeData>
   draft: AgentDraft
   onChange: (d: AgentDraft) => void
   onClose: () => void
+  editingExisting?: boolean
 }) {
   const { kind, idx } = node.data
+  const savedSkills = useSkillsStore((s) => s.skills)
 
   const patch = (partial: Partial<AgentDraft>) => onChange({ ...draft, ...partial })
 
-  // capabilities
+  // capabilities — every capability IS a skill; picking one derives the rest
   if (kind === 'capability' && idx !== undefined) {
     const cap = draft.capabilities[idx]
-    const setCap = (p: Partial<CapabilityDraft>) =>
-      patch({ capabilities: draft.capabilities.map((c, i) => i === idx ? { ...c, ...p } : c) })
+    const setSkill = (skillName: string) => {
+      const skill = savedSkills.find((s) => s.draft.name === skillName)?.draft
+      patch({
+        capabilities: draft.capabilities.map((c, i) =>
+          i === idx ? applySkillToCapability(skillName, skill) : c,
+        ),
+      })
+    }
     return (
       <div className="graph-detail">
         <div className="graph-detail-head">
@@ -171,11 +181,24 @@ function GraphDetailPanel({
           <button className="link" onClick={onClose}>✕</button>
         </div>
         <div className="graph-detail-body">
-          <Field label="Name"><TextInput value={cap.name} onChange={(v) => setCap({ name: v })} mono /></Field>
-          <Field label="Description"><TextArea value={cap.description} onChange={(v) => setCap({ description: v })} rows={2} /></Field>
-          <Field label="Version"><TextInput value={cap.version} onChange={(v) => setCap({ version: v })} mono /></Field>
-          <Field label="Implemented by"><TextInput value={cap.implementedBy} onChange={(v) => setCap({ implementedBy: v })} mono /></Field>
-          <Field label="Tags"><TextInput value={cap.tags} onChange={(v) => setCap({ tags: v })} mono /></Field>
+          <Field label="Skill" required hint="Everything below is derived from it">
+            <select value={cap.implementedBy} onChange={(e) => setSkill(e.target.value)}>
+              <option value="">Select a skill…</option>
+              {savedSkills.map((s) => s.draft.name && (
+                <option key={s.id} value={s.draft.name}>{s.draft.name}</option>
+              ))}
+            </select>
+          </Field>
+          {cap.implementedBy ? (
+            <div className="detail">
+              <div className="detail-row"><span className="detail-k">Name</span><span className="mono">{cap.name || '—'}</span></div>
+              <div className="detail-row"><span className="detail-k">Version</span><span className="mono">{cap.version || '—'}</span></div>
+              <div className="detail-row"><span className="detail-k">Description</span><span>{cap.description || '—'}</span></div>
+              <div className="detail-row"><span className="detail-k">Output schema</span><span className="mono">{cap.outputSchema || '—'}</span></div>
+            </div>
+          ) : (
+            <p className="empty">Pick a skill to fill in this capability.</p>
+          )}
         </div>
       </div>
     )
@@ -286,7 +309,9 @@ function GraphDetailPanel({
           <button className="link" onClick={onClose}>✕</button>
         </div>
         <div className="graph-detail-body">
-          <Field label="Name"><TextInput value={draft.metadata.name} onChange={(v) => patchMeta({ name: v })} mono /></Field>
+          <Field label="Name" hint={editingExisting ? 'Locked — you are updating an existing agent' : undefined}>
+            <TextInput value={draft.metadata.name} onChange={(v) => patchMeta({ name: v })} mono disabled={editingExisting} />
+          </Field>
           <Field label="Version"><TextInput value={draft.metadata.version} onChange={(v) => patchMeta({ version: v })} mono /></Field>
           <Field label="Description"><TextArea value={draft.metadata.description} onChange={(v) => patchMeta({ description: v })} rows={2} /></Field>
           <Field label="Owner"><TextInput value={draft.metadata.owner} onChange={(v) => patchMeta({ owner: v })} /></Field>
@@ -300,7 +325,13 @@ function GraphDetailPanel({
 
 // ── main component ───────────────────────────────────────────────────────────
 
-export function AgentGraph({ draft, onDraftChange }: { draft: AgentDraft; onDraftChange: (d: AgentDraft) => void }) {
+export function AgentGraph({
+  draft, onDraftChange, editingExisting,
+}: {
+  draft: AgentDraft
+  onDraftChange: (d: AgentDraft) => void
+  editingExisting?: boolean
+}) {
   const [nodes, setNodes] = useState<Node[]>(() => buildGraph(draft))
   const [selected, setSelected] = useState<Node<NodeData> | null>(null)
 
@@ -376,6 +407,7 @@ export function AgentGraph({ draft, onDraftChange }: { draft: AgentDraft; onDraf
             draft={draft}
             onChange={onDraftChange}
             onClose={() => setSelected(null)}
+            editingExisting={editingExisting}
           />
         </div>
       )}

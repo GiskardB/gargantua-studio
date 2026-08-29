@@ -10,7 +10,7 @@ import { useSkillsStore } from '../../store/skillsStore'
 import { usePlatformStore } from '../../store/platformStore'
 import { getWorkloadDraft, downloadBundle, skillsForDraft } from '../../lib/api'
 import { useManifestBuild, usePublish } from '../../lib/useManifestPreview'
-import { emptyDraft } from '../../types/draft'
+import { emptyDraft, nextVersion } from '../../types/draft'
 
 type Tab = 'form' | 'graph'
 
@@ -39,7 +39,7 @@ export function AgentDesignerScreen() {
   const [showPublishDialog, setShowPublishDialog] = useState(false)
 
   const { yaml, errors, source, valid } = useManifestBuild(draft)
-  const { publishState, published, publish } = usePublish(draft, yaml)
+  const { publishState, publish } = usePublish(draft, yaml)
   const skills = useSkillsStore((s) => s.skills)
   // Publishing needs the Control Plane (Studio itself only persists drafts + skills
   // in Postgres, then pushes the bundle to CP). When CP is down or a developer is
@@ -88,7 +88,12 @@ export function AgentDesignerScreen() {
     getWorkloadDraft(name, version)
       .then((fetched) => {
         if (cancelled) return
-        setDraft(fetched)
+        // Versions are immutable on the Control Plane — republishing this draft as-is
+        // would 409. Precompile the next version so Save & Publish just works.
+        setDraft({
+          ...fetched,
+          metadata: { ...fetched.metadata, version: nextVersion(fetched.metadata.version) },
+        })
         setLoadState('idle')
       })
       .catch((err) => {
@@ -120,7 +125,7 @@ export function AgentDesignerScreen() {
     // the placeholder is meant to be overwritten, not a real default.
     setDraft({
       ...emptyDraft(),
-      metadata: { ...emptyDraft().metadata, name: 'new-agent', version: '0.1.0' },
+      metadata: { ...emptyDraft().metadata, name: 'new-agent', version: '1.0.0' },
     })
     setFormOpen(true)
   }
@@ -152,32 +157,18 @@ export function AgentDesignerScreen() {
           </>
         }
       >
-        <div className="agent-split">
-          <div className="agent-editor">
-            <div className="welcome-state">
-              <div className="welcome-icon">▰▰</div>
-              <h2>Create your first agent</h2>
-              <p>Start from scratch or load a sample to see how it works.</p>
-              <div className="welcome-actions">
-                <button className="primary" onClick={startNew}>+ New Agent</button>
-                <button onClick={startSample} style={{ marginLeft: 12 }}>
-                  Load sample
-                </button>
-              </div>
-              <div className="welcome-hint">
-                <p>Or go to <strong>Workload Designer</strong> to see published agents and click one to edit it.</p>
-              </div>
-            </div>
+        <div className="welcome-state">
+          <div className="welcome-icon">▰▰</div>
+          <h2>Create your first agent</h2>
+          <p>Start from scratch or load a sample to see how it works.</p>
+          <div className="welcome-actions">
+            <button className="primary" onClick={startNew}>+ New Agent</button>
+            <button onClick={startSample} style={{ marginLeft: 12 }}>
+              Load sample
+            </button>
           </div>
-          <div className="agent-preview">
-            <ManifestPreview
-              yaml={yaml}
-              errors={errors}
-              source={source}
-              filename={`${draft.metadata.name || 'agent'}-manifest.yaml`}
-              publishState={publishState}
-              published={published}
-            />
+          <div className="welcome-hint">
+            <p>Or go to <strong>Workload Designer</strong> to see published agents and click one to edit it.</p>
           </div>
         </div>
       </Screen>
@@ -241,9 +232,9 @@ export function AgentDesignerScreen() {
       <div className={previewCollapsed ? 'agent-split preview-collapsed' : 'agent-split'}>
         <div className="agent-editor">
           {tab === 'form' ? (
-            <AgentDesigner draft={draft} onChange={setDraft} />
+            <AgentDesigner draft={draft} onChange={setDraft} editingExisting={!!editingWorkload} />
           ) : (
-            <AgentGraph draft={draft} onDraftChange={setDraft} />
+            <AgentGraph draft={draft} onDraftChange={setDraft} editingExisting={!!editingWorkload} />
           )}
         </div>
         {previewCollapsed ? (
@@ -258,18 +249,13 @@ export function AgentDesignerScreen() {
           </div>
         ) : (
           <div className="agent-preview">
-            <div className="preview-collapse-row">
-              <button className="link" onClick={() => setPreviewCollapsed(true)} title="Hide manifest.yaml">
-                collapse »
-              </button>
-            </div>
             <ManifestPreview
               yaml={yaml}
               errors={errors}
               source={source}
               filename={`${draft.metadata.name || 'agent'}-manifest.yaml`}
               publishState={publishState}
-              published={published}
+              onCollapse={() => setPreviewCollapsed(true)}
             />
           </div>
         )}

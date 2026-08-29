@@ -16,10 +16,23 @@ interface Turn {
 export function Playground() {
   const runtimeUrl = useRuntimeStore((s) => s.runtimeUrl)
   const setRuntimeUrl = useRuntimeStore((s) => s.setRuntimeUrl)
-  const { workloads } = usePlatformStore((s) => ({
-    workloads: s.workloads,
-  }))
-  const [selectedWorkload, setSelectedWorkload] = useState<string>('')
+  const deployments = usePlatformStore((s) => s.deployments)
+  const refresh = usePlatformStore((s) => s.refresh)
+  const cpOnline = usePlatformStore((s) => s.cpOnline)
+
+  useEffect(() => {
+    void refresh()
+  }, [refresh])
+
+  // Most published bundles were never launched anywhere — only deployments the Control
+  // Plane has actually observed become HEALTHY are worth chatting with. Studio's Launch
+  // action (Workload Designer) reports that state after it runs the launch command.
+  // Most recently launched first, since only one runtime is reachable at a time.
+  const activeAgents = (deployments ?? [])
+    .filter((d) => d.state === 'HEALTHY')
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+
+  const [selectedDeployment, setSelectedDeployment] = useState<string>('')
   const [turns, setTurns] = useState<Turn[]>([])
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
@@ -29,13 +42,14 @@ export function Playground() {
   const [roles, setRoles] = useState('')
   // Stable session id so multi-turn memory works within a Playground session.
   const session = useRef(crypto.randomUUID())
+  const selected = activeAgents.find((d) => d.id === selectedDeployment)
 
-  // Auto-populate runtime URL when a workload is selected and URL is empty/default
+  // Auto-populate runtime URL when an active agent is selected and URL is empty/default
   useEffect(() => {
-    if (selectedWorkload && !runtimeUrl) {
+    if (selected && !runtimeUrl) {
       setRuntimeUrl('http://localhost:18100')
     }
-  }, [selectedWorkload, runtimeUrl, setRuntimeUrl])
+  }, [selected, runtimeUrl, setRuntimeUrl])
 
   const send = async () => {
     const message = input.trim()
@@ -63,22 +77,27 @@ export function Playground() {
         <>
           <div className="pg-controls">
             <select
-              value={selectedWorkload}
-              onChange={(e) => setSelectedWorkload(e.target.value)}
+              value={selectedDeployment}
+              onChange={(e) => setSelectedDeployment(e.target.value)}
               className="mono"
-              style={{ width: 200, marginRight: 12 }}
+              style={{ width: 240, marginRight: 12 }}
             >
-              <option value="">— Select workload —</option>
-              {workloads?.map((w) => (
-                <option key={`${w.name}:${w.version}`} value={`${w.name}:${w.version}`}>
-                  {w.name} ({w.kind}) v{w.version}
+              <option value="">
+                {activeAgents.length === 0 ? '— No active agents —' : '— Select active agent —'}
+              </option>
+              {activeAgents.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.bundleName} v{d.bundleVersion} ({d.environment})
                 </option>
               ))}
             </select>
-            {selectedWorkload && (
-              <div style={{ marginLeft: 12, display: 'inline-block' }}>
-                <Badge tone="neutral">Testing: {selectedWorkload.split(':')[0]}</Badge>
-              </div>
+            {selected && <Badge tone="good">Testing: {selected.bundleName}</Badge>}
+            {activeAgents.length === 0 && (
+              <span className="dim" style={{ fontSize: 12 }}>
+                {cpOnline === false
+                  ? 'Control Plane offline — cannot check for active agents.'
+                  : 'No agents are currently running — launch one from the Workload Designer.'}
+              </span>
             )}
           </div>
           <div className="pg-controls">

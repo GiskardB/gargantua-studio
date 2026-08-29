@@ -100,4 +100,43 @@ public class ControlPlaneClient {
             throw new UpstreamException("Control Plane unreachable for publish", e);
         }
     }
+
+    /**
+     * Register a desired deployment for a bundle Studio is about to launch (environment
+     * DEV — Studio's launch is a local/dev convenience, not a real rollout). 404s if the
+     * bundle was never published there.
+     */
+    public ResponseEntity<String> createDeployment(String bundleName, String bundleVersion) {
+        try {
+            return client.post()
+                    .uri("/api/v1/deployments")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .accept(MediaType.APPLICATION_JSON)
+                    .body(Map.of(
+                            "bundleName", bundleName,
+                            "bundleVersion", bundleVersion,
+                            "environment", "DEV"))
+                    .retrieve()
+                    .onStatus(HttpStatusCode::isError, (req, res) -> { })
+                    .toEntity(String.class);
+        } catch (ResourceAccessException e) {
+            throw new UpstreamException("Control Plane unreachable for deployment create", e);
+        }
+    }
+
+    /** Report the observed state of a deployment after Studio has actually run the launch command. */
+    public ResponseEntity<String> updateDeploymentState(String deploymentId, String state) {
+        try {
+            return client.put()
+                    .uri("/api/v1/deployments/{id}/state", deploymentId)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .accept(MediaType.APPLICATION_JSON)
+                    .body(Map.of("state", state))
+                    .retrieve()
+                    .onStatus(HttpStatusCode::isError, (req, res) -> { })
+                    .toEntity(String.class);
+        } catch (ResourceAccessException e) {
+            throw new UpstreamException("Control Plane unreachable for deployment state update", e);
+        }
+    }
 }

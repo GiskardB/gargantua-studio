@@ -57,31 +57,27 @@ export interface PublishNote {
 
 export function usePublish(draft: AgentDraft, yaml: string) {
   const [publishState, setPublishState] = useState<PublishNote | null>(null)
-  const [published, setPublished] = useState<{ name: string; version: string } | null>(null)
 
   const publish = async () => {
     setPublishState({ tone: 'info', text: 'Publishing…' })
-    setPublished(null)
     try {
       const skills = skillsForDraft(draft, useSkillsStore.getState().skills.map((e) => e.draft))
       await publishDraft(draft, skills)
       setPublishState({
         tone: 'good',
-        text: `Published ${draft.metadata.name}@${draft.metadata.version}`,
+        text: `Published ${draft.metadata.name}@${draft.metadata.version}. To launch it, use the launcher on the Workload Designer home page.`,
       })
-      setPublished({ name: draft.metadata.name, version: draft.metadata.version })
     } catch (e) {
       const msg = e instanceof OfflineError ? 'Backend offline — cannot publish' : (e as Error).message
       setPublishState({ tone: 'bad', text: msg })
     }
   }
 
-  // A fresh edit after a successful publish invalidates the "published" banner —
-  // otherwise the Launch panel would keep offering to launch stale content.
+  // A fresh edit after a successful publish invalidates the note — it described content
+  // that's no longer what's on screen.
   useEffect(() => {
-    setPublished(null)
     setPublishState(null)
   }, [yaml])
 
-  return { publishState, published, publish }
+  return { publishState, publish }
 }

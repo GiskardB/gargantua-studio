@@ -13,6 +13,7 @@ import {
   getWorkloads,
 } from '../lib/api'
 import type { WorkloadKind, WorkloadRow } from '../mock/data'
+import { compareVersions } from '../types/draft'
 
 type Source = 'live' | 'mock' | 'loading'
 
@@ -64,8 +65,21 @@ interface CpBundle {
   environments?: string[]
 }
 
+// Versions are immutable on the Control Plane, so republishing an update adds a new
+// bundle row rather than overwriting the old one. Only the latest version per name is
+// shown here — otherwise every republish would look like a brand new workload next to
+// the one it updates.
+function latestPerName(rows: WorkloadRow[]): WorkloadRow[] {
+  const byName = new Map<string, WorkloadRow>()
+  for (const row of rows) {
+    const current = byName.get(row.name)
+    if (!current || compareVersions(row.version, current.version) > 0) byName.set(row.name, row)
+  }
+  return [...byName.values()]
+}
+
 function mapWorkloads(raw: unknown[]): WorkloadRow[] {
-  return (raw as CpBundle[]).map((b) => {
+  const rows: WorkloadRow[] = (raw as CpBundle[]).map((b) => {
     const envs = b.environments ?? []
     const state = envs.includes('PRODUCTION')
       ? 'running'
@@ -83,6 +97,7 @@ function mapWorkloads(raw: unknown[]): WorkloadRow[] {
       updated: 'published',
     }
   })
+  return latestPerName(rows)
 }
 
 function mapSkillAssignments(raw: unknown[]): Record<string, SkillAssignment[]> {

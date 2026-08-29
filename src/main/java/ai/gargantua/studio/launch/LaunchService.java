@@ -1,10 +1,15 @@
 package ai.gargantua.studio.launch;
 
+import ai.gargantua.studio.controlplane.ControlPlaneClient;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 
 /**
@@ -14,8 +19,10 @@ import org.springframework.stereotype.Service;
  *
  * <p>The runtime cannot hot-swap which agent it serves (ADR-001: one process, one agent,
  * config bound at startup), so "launch" means (re)starting the runtime container pointed
- * at the freshly published bundle. The Control Plane does not track runtime instances
- * (ADR-004), which is why this lives here rather than there.
+ * at the freshly published bundle. The Control Plane does not execute the launch itself
+ * (ADR-004), which is why this lives here rather than there — but Studio, as the executor,
+ * reports the observed outcome back to the Control Plane's Deployment record so the rest
+ * of the platform (e.g. the Playground) can tell which agent is actually running.
  *
  * <p>Security: {@code name}/{@code version} are substituted into a shell command, so they
  * are validated against a strict allow-list first. This endpoint executes arbitrary
@@ -24,6 +31,8 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class LaunchService {
+
+    private static final Logger log = LoggerFactory.getLogger(LaunchService.class);
 
     static final String TEMPLATE_KEY = "launch.command-template";
 
@@ -35,14 +44,20 @@ public class LaunchService {
     private final SettingsStore settings;
     private final String defaultTemplate;
     private final String workdir;
+    private final ControlPlaneClient controlPlane;
+    private final ObjectMapper mapper;
 
     public LaunchService(
             SettingsStore settings,
             @Value("${gargantua.launch.command-template}") String defaultTemplate,
-            @Value("${gargantua.launch.workdir}") String workdir) {
+            @Value("${gargantua.launch.workdir}") String workdir,
+            ControlPlaneClient controlPlane,
+            ObjectMapper mapper) {
         this.settings = settings;
         this.defaultTemplate = defaultTemplate;
         this.workdir = workdir;
+        this.controlPlane = controlPlane;
+        this.mapper = mapper;
     }
 
     public String commandTemplate() {
@@ -64,9 +79,16 @@ public class LaunchService {
         if (version == null || !SAFE.matcher(version).matches()) {
             throw new IllegalArgumentException("invalid agent version: " + version);
         }
+        String deploymentId = registerDeployment(name, version);
         String command = commandTemplate()
                 .replace("{name}", name)
                 .replace("{version}", version);
+        LaunchResult result = run(command);
+        reportDeploymentState(deploymentId, result.exitCode() == 0 ? "HEALTHY" : "FAILED");
+        return result;
+    }
+
+    private LaunchResult run(String command) {
         try {
             Process process = new ProcessBuilder("sh", "-c", command)
                     .directory(new java.io.File(workdir))
@@ -84,6 +106,36 @@ public class LaunchService {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             return new LaunchResult(-1, command, "launch interrupted");
+        }
+    }
+
+    /**
+     * Best-effort: records a PENDING deployment with the Control Plane so the launch's
+     * outcome can be reported. A launch must still work standalone (no Control Plane, or
+     * the bundle only exists locally), so any failure here just means nobody will see this
+     * agent as "active" — it does not block the actual launch.
+     */
+    private String registerDeployment(String name, String version) {
+        try {
+            ResponseEntity<String> res = controlPlane.createDeployment(name, version);
+            if (!res.getStatusCode().is2xxSuccessful() || res.getBody() == null) {
+                return null;
+            }
+            return mapper.readTree(res.getBody()).path("id").asText(null);
+        } catch (Exception e) {
+            log.debug("Could not register deployment for {}@{} with the Control Plane", name, version, e);
+            return null;
+        }
+    }
+
+    private void reportDeploymentState(String deploymentId, String state) {
+        if (deploymentId == null) {
+            return;
+        }
+        try {
+            controlPlane.updateDeploymentState(deploymentId, state);
+        } catch (Exception e) {
+            log.debug("Could not report deployment {} state {} to the Control Plane", deploymentId, state, e);
         }
     }
 

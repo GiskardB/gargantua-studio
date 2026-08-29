@@ -7,6 +7,7 @@
 // from this draft to the real gargantua.ai/v1 document.
 
 import type { MemoryLayer, McpTransport, McpAuthType } from './manifest'
+import type { SkillDraft } from './skillDraft'
 
 export interface CapabilityDraft {
   name: string
@@ -109,6 +110,40 @@ export function emptyCapability(): CapabilityDraft {
     outputSchema: '',
     tags: '',
   }
+}
+
+// Every capability IS a skill: picking one derives the rest of the card. Only
+// `implementedBy` is user-chosen; the fields a skill doesn't have (input schema,
+// tags) are left blank since there's nothing to derive them from.
+export function applySkillToCapability(skillName: string, skill: SkillDraft | undefined): CapabilityDraft {
+  return {
+    name: skill?.name ?? skillName,
+    description: skill?.description ?? '',
+    version: skill?.version ?? '',
+    implementedBy: skillName,
+    inputSchema: '',
+    outputSchema: skill?.outputSchema ?? '',
+    tags: '',
+  }
+}
+
+function parseSemver(v: string): [number, number, number] {
+  const m = /^(\d+)\.(\d+)\.(\d+)/.exec(v || '')
+  return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : [0, 0, 0]
+}
+
+/** -1/0/1 like a standard comparator; unparseable versions sort as 0.0.0. */
+export function compareVersions(a: string, b: string): number {
+  const [a1, a2, a3] = parseSemver(a)
+  const [b1, b2, b3] = parseSemver(b)
+  return a1 - b1 || a2 - b2 || a3 - b3
+}
+
+/** Patch-bumps a version for republishing (versions are immutable on the Control Plane); '1.0.0' for a first save. */
+export function nextVersion(current: string): string {
+  if (!current) return '1.0.0'
+  const [maj, min, pat] = parseSemver(current)
+  return `${maj}.${min}.${pat + 1}`
 }
 
 export function emptyMcpServer(): McpServerDraft {

@@ -53,6 +53,7 @@ export function TextInput({
   placeholder,
   mono,
   list,
+  disabled,
 }: {
   value: string
   onChange: (v: string) => void
@@ -60,6 +61,7 @@ export function TextInput({
   mono?: boolean
   /** Wires an HTML `<datalist id="...">` for suggestions without forcing one of them. */
   list?: string
+  disabled?: boolean
 }) {
   return (
     <input
@@ -68,6 +70,7 @@ export function TextInput({
       value={value}
       placeholder={placeholder}
       list={list}
+      disabled={disabled}
       onChange={(e) => onChange(e.target.value)}
     />
   )

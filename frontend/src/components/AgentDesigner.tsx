@@ -20,6 +20,7 @@ import {
   emptyGuardrail,
   emptyKnowledgeRef,
   emptyResourceRef,
+  applySkillToCapability,
 } from '../types/draft'
 import {
   MCP_TRANSPORTS,
@@ -33,9 +34,11 @@ import { useSkillsStore } from '../store/skillsStore'
 interface Props {
   draft: AgentDraft
   onChange: (next: AgentDraft) => void
+  /** True while editing an already-published workload — its name is fixed. */
+  editingExisting?: boolean
 }
 
-export function AgentDesigner({ draft, onChange }: Props) {
+export function AgentDesigner({ draft, onChange, editingExisting }: Props) {
   // Skills the user has authored, so `implementedBy` can be picked rather than typed
   // blind — this is now the only place a skill gets linked to an agent.
   const savedSkills = useSkillsStore((s) => s.skills)
@@ -57,17 +60,10 @@ export function AgentDesigner({ draft, onChange }: Props) {
   const addCapability = () => patch({ capabilities: [...draft.capabilities, emptyCapability()] })
   const removeCapability = (i: number) =>
     patch({ capabilities: draft.capabilities.filter((_, idx) => idx !== i) })
-  // Picking a known skill as implementedBy prefills empty name/description/version from
-  // it — pure convenience, every field stays independently editable afterward.
-  const setCapabilityImplementedBy = (i: number, skillName: string) => {
-    const c = draft.capabilities[i]
+  // A capability IS a skill: picking one derives every other field on the card.
+  const setCapabilitySkill = (i: number, skillName: string) => {
     const skill = savedSkills.find((s) => s.draft.name === skillName)?.draft
-    setCapability(i, {
-      implementedBy: skillName,
-      name: c.name || skill?.name || c.name,
-      description: c.description || skill?.description || c.description,
-      version: c.version || skill?.version || c.version,
-    })
+    setCapability(i, applySkillToCapability(skillName, skill))
   }
 
   // ---- MCP servers ----
@@ -130,10 +126,14 @@ export function AgentDesigner({ draft, onChange }: Props) {
     <div className="designer">
       <Section title="Metadata" hint="Identity of the workload — name and version are required.">
         <div className="grid two">
-          <Field label="Name" required hint="Stable across versions, e.g. customer-agent">
-            <TextInput value={draft.metadata.name} onChange={(v) => patchMeta({ name: v })} placeholder="customer-agent" mono />
+          <Field
+            label="Name"
+            required
+            hint={editingExisting ? 'Locked — you are updating an existing agent' : 'Stable across versions, e.g. customer-agent'}
+          >
+            <TextInput value={draft.metadata.name} onChange={(v) => patchMeta({ name: v })} placeholder="customer-agent" mono disabled={editingExisting} />
           </Field>
-          <Field label="Version" required hint="Semver of this revision">
+          <Field label="Version" required hint="Semver of this revision — precompiled, bumped automatically on publish">
             <TextInput value={draft.metadata.version} onChange={(v) => patchMeta({ version: v })} placeholder="1.0.0" mono />
           </Field>
         </div>
@@ -199,11 +199,8 @@ export function AgentDesigner({ draft, onChange }: Props) {
 
       <Section
         title="Capabilities"
-        hint="The external contract callers route on. Implemented by is a skill name (write one in the Skill Designer first to have it suggested here) — this is the only place a skill gets linked to this agent."
+        hint="The external contract callers route on. Every capability is a skill — pick one (write it in the Skill Designer first) and its name, version, description and output schema are derived from it. This is the only place a skill gets linked to this agent."
       >
-        <datalist id="known-skill-names">
-          {savedSkills.map((s) => s.draft.name && <option key={s.id} value={s.draft.name} />)}
-        </datalist>
         {draft.capabilities.length === 0 && <p className="empty">No capabilities yet.</p>}
         {draft.capabilities.map((c, i) => (
           <div className="card" key={i}>
@@ -211,25 +208,24 @@ export function AgentDesigner({ draft, onChange }: Props) {
               <strong>Capability {i + 1}</strong>
               <button className="link danger" onClick={() => removeCapability(i)}>remove</button>
             </div>
-            <div className="grid three">
-              <Field label="Name" required><TextInput value={c.name} onChange={(v) => setCapability(i, { name: v })} placeholder="refund-payment" mono /></Field>
-              <Field label="Version"><TextInput value={c.version} onChange={(v) => setCapability(i, { version: v })} placeholder="1.0.0" mono /></Field>
-              <Field label="Implemented by" hint="Pick a skill you've written">
-                <TextInput
-                  value={c.implementedBy}
-                  onChange={(v) => setCapabilityImplementedBy(i, v)}
-                  placeholder="refund-skill"
-                  list="known-skill-names"
-                  mono
-                />
-              </Field>
-            </div>
-            <Field label="Description"><TextArea value={c.description} onChange={(v) => setCapability(i, { description: v })} rows={2} /></Field>
-            <div className="grid three">
-              <Field label="Input schema"><TextInput value={c.inputSchema} onChange={(v) => setCapability(i, { inputSchema: v })} placeholder="schemas/refund-input.json" mono /></Field>
-              <Field label="Output schema"><TextInput value={c.outputSchema} onChange={(v) => setCapability(i, { outputSchema: v })} placeholder="schemas/refund-output.json" mono /></Field>
-              <Field label="Tags" hint="Comma-separated"><TextInput value={c.tags} onChange={(v) => setCapability(i, { tags: v })} placeholder="payments, gdpr" mono /></Field>
-            </div>
+            <Field label="Skill" required hint="The only field you fill in — everything below comes from it">
+              <select value={c.implementedBy} onChange={(e) => setCapabilitySkill(i, e.target.value)}>
+                <option value="">Select a skill…</option>
+                {savedSkills.map((s) => s.draft.name && (
+                  <option key={s.id} value={s.draft.name}>{s.draft.name}</option>
+                ))}
+              </select>
+            </Field>
+            {c.implementedBy ? (
+              <div className="detail">
+                <div className="detail-row"><span className="detail-k">Name</span><span className="mono">{c.name || '—'}</span></div>
+                <div className="detail-row"><span className="detail-k">Version</span><span className="mono">{c.version || '—'}</span></div>
+                <div className="detail-row"><span className="detail-k">Description</span><span>{c.description || '—'}</span></div>
+                <div className="detail-row"><span className="detail-k">Output schema</span><span className="mono">{c.outputSchema || '—'}</span></div>
+              </div>
+            ) : (
+              <p className="empty">Pick a skill to fill in this capability.</p>
+            )}
           </div>
         ))}
         <button className="add" onClick={addCapability}>+ Add capability</button>
