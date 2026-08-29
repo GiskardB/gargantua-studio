@@ -32,10 +32,7 @@ gargantua:
       docker rm -f gargantua-runtime 2>/dev/null;
       docker run -d --name gargantua-runtime --network gargantua-compose_default -p 18100:8080
       -e GARGANTUA_BUNDLE_URL=http://control-plane:8080/api/v1/registry/bundles/{name}/{version}/bundle
-      -e SPRING_PROFILES_ACTIVE=embedded -e ROUTING_STRATEGY=semantic
-      -e LLM_PRIMARY_PROVIDER=openai -e LLM_PRIMARY_MODEL=qwen2.5:0.5b
-      -e LLM_PRIMARY_ENDPOINT=http://ollama:11434/v1 -e LLM_PRIMARY_API_KEY=ollama
-      -e AGENT_WEB_CORS_ALLOWED_ORIGINS=*
+      -e SPRING_PROFILES_ACTIVE=embedded,cave
       gargantua-runtime:local
     # Working directory the command runs in (unused by the docker-run default).
     workdir: .

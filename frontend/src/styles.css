@@ -129,6 +129,8 @@ button.link { background: none; border: none; padding: 0; color: var(--accent); 
 button.add { align-self: flex-start; border-style: dashed; color: var(--fg-dim); }
 button.link.danger { color: var(--fg-mute); }
 button.link.danger:hover { color: var(--red); }
+button.danger { color: var(--red); }
+button.danger:hover:not(:disabled) { border-color: var(--red); color: var(--red); background: var(--red-soft); }
 button.toggle.on, button.pg-controls .toggle.on { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
 
 input[type="text"], textarea, select {

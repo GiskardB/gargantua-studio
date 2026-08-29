@@ -7,7 +7,7 @@
 
 export type Health = 'healthy' | 'degraded' | 'offline'
 export type WorkloadKind = 'AGENT' | 'WORKFLOW' | 'EVALUATOR' | 'CLASSIFIER' | 'SERVICE' | 'BATCH_JOB'
-export type DeployState = 'running' | 'canary' | 'draft' | 'stopped'
+export type DeployState = 'running' | 'canary' | 'published' | 'stopped'
 
 export interface WorkloadRow {
   name: string
@@ -25,7 +25,7 @@ export const WORKLOADS: WorkloadRow[] = [
   { name: 'fraud-agent', kind: 'AGENT', version: '0.9.1', owner: 'risk-team', state: 'canary', health: 'healthy', capabilities: 3, updated: '20m ago' },
   { name: 'onboarding-flow', kind: 'WORKFLOW', version: '2.0.0', owner: 'growth-team', state: 'running', health: 'degraded', capabilities: 1, updated: '1d ago' },
   { name: 'intent-classifier', kind: 'CLASSIFIER', version: '1.0.4', owner: 'platform', state: 'running', health: 'healthy', capabilities: 1, updated: '5h ago' },
-  { name: 'refund-quality-eval', kind: 'EVALUATOR', version: '0.3.0', owner: 'risk-team', state: 'draft', health: 'offline', capabilities: 0, updated: '3d ago' },
+  { name: 'refund-quality-eval', kind: 'EVALUATOR', version: '0.3.0', owner: 'risk-team', state: 'published', health: 'offline', capabilities: 0, updated: '3d ago' },
   { name: 'invoice-summariser', kind: 'SERVICE', version: '1.1.2', owner: 'finance', state: 'running', health: 'healthy', capabilities: 1, updated: '8h ago' },
   { name: 'nightly-reconcile', kind: 'BATCH_JOB', version: '1.0.0', owner: 'finance', state: 'stopped', health: 'offline', capabilities: 0, updated: '2w ago' },
 ]

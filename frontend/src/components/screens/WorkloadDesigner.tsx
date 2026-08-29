@@ -18,7 +18,7 @@ const KIND_TONE: Record<WorkloadKind, Tone> = {
 const STATE_TONE: Record<DeployState, Tone> = {
   running: 'good',
   canary: 'warn',
-  draft: 'neutral',
+  published: 'neutral',
   stopped: 'bad',
 }
 
@@ -87,7 +87,7 @@ export function WorkloadDesigner() {
               </div>
               <div className="wl-foot">
                 <Badge tone={STATE_TONE[w.state]}>{w.state}</Badge>
-                <span className="wl-updated">updated {w.updated}</span>
+                <span className="wl-updated">published {w.updated}</span>
               </div>
               <div className="wl-actions">
                 <button
@@ -104,11 +104,12 @@ export function WorkloadDesigner() {
                 </button>
                 {isLive && (
                   <button
-                    className="link danger"
+                    className="danger"
+                    title="Delete this published version"
                     disabled={deleting === `${w.name}:${w.version}`}
                     onClick={() => handleDelete(w.name, w.version)}
                   >
-                    {deleting === `${w.name}:${w.version}` ? 'deleting…' : 'delete'}
+                    {deleting === `${w.name}:${w.version}` ? 'Deleting…' : 'Delete'}
                   </button>
                 )}
               </div>

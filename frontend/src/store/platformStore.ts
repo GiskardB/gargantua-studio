@@ -81,11 +81,14 @@ function latestPerName(rows: WorkloadRow[]): WorkloadRow[] {
 function mapWorkloads(raw: unknown[]): WorkloadRow[] {
   const rows: WorkloadRow[] = (raw as CpBundle[]).map((b) => {
     const envs = b.environments ?? []
+    // Registered in the Control Plane but never promoted to an environment — "draft" would
+    // wrongly suggest it isn't saved anywhere, when it's already a published, immutable
+    // bundle version; it's just not deployed.
     const state = envs.includes('PRODUCTION')
       ? 'running'
       : envs.includes('STAGING')
         ? 'canary'
-        : 'draft'
+        : 'published'
     return {
       name: b.descriptor.name,
       kind: b.descriptor.kind,
@@ -94,7 +97,7 @@ function mapWorkloads(raw: unknown[]): WorkloadRow[] {
       state,
       health: 'healthy',
       capabilities: b.descriptor.capabilities?.length ?? 0,
-      updated: 'published',
+      updated: b.descriptor.createdAt ? new Date(b.descriptor.createdAt).toLocaleDateString() : '—',
     }
   })
   return latestPerName(rows)

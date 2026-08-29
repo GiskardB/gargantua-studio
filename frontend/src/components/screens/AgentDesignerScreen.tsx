@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useSearchParams, useNavigate } from 'react-router-dom'
 import { AgentDesigner } from '../AgentDesigner'
 import { AgentGraph } from '../AgentGraph'
 import { ManifestPreview } from '../ManifestPreview'
@@ -28,6 +28,7 @@ export function AgentDesignerScreen() {
   // landing state instead of getting stuck showing a stale editing session.
   const [searchParams, setSearchParams] = useSearchParams()
   const editingWorkload = searchParams.get('workload')
+  const navigate = useNavigate()
 
   const [formOpen, setFormOpen] = useState(false)
   const [tab, setTab] = useState<Tab>('form')
@@ -267,7 +268,8 @@ export function AgentDesignerScreen() {
           version={draft.metadata.version || '0.0.0'}
           onPublish={async () => {
             setShowPublishDialog(false)
-            await publish()
+            const published = await publish()
+            if (published) navigate('/workload')
           }}
           onCancel={() => setShowPublishDialog(false)}
         />

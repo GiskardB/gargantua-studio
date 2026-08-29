@@ -58,18 +58,18 @@ export interface PublishNote {
 export function usePublish(draft: AgentDraft, yaml: string) {
   const [publishState, setPublishState] = useState<PublishNote | null>(null)
 
-  const publish = async () => {
+  /** Returns whether the publish succeeded, so the caller can navigate away on success. */
+  const publish = async (): Promise<boolean> => {
     setPublishState({ tone: 'info', text: 'Publishing…' })
     try {
       const skills = skillsForDraft(draft, useSkillsStore.getState().skills.map((e) => e.draft))
       await publishDraft(draft, skills)
-      setPublishState({
-        tone: 'good',
-        text: `Published ${draft.metadata.name}@${draft.metadata.version}. To launch it, use the launcher on the Workload Designer home page.`,
-      })
+      setPublishState({ tone: 'good', text: `Published ${draft.metadata.name}@${draft.metadata.version}` })
+      return true
     } catch (e) {
       const msg = e instanceof OfflineError ? 'Backend offline — cannot publish' : (e as Error).message
       setPublishState({ tone: 'bad', text: msg })
+      return false
     }
   }
 
