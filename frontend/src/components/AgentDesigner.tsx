@@ -13,6 +13,10 @@ import type {
   ResourceRefDraft,
   GovernanceDraft,
   Visibility,
+  CognitionDraft,
+  ContractDraft,
+  ModelDescriptorDraft,
+  InterfaceEndpointDraft,
 } from '../types/draft'
 import {
   emptyCapability,
@@ -20,6 +24,7 @@ import {
   emptyGuardrail,
   emptyKnowledgeRef,
   emptyResourceRef,
+  emptyInterfaceEndpoint,
   applySkillToCapability,
 } from '../types/draft'
 import {
@@ -111,6 +116,24 @@ export function AgentDesigner({ draft, onChange, editingExisting }: Props) {
   // ---- governance (tenant, visibility, status, ACL) ----
   const patchGovernance = (partial: Partial<GovernanceDraft>) =>
     patch({ governance: { ...draft.governance, ...partial } })
+
+  // ---- PACT Core: cognition, contract, interfaces (declarative — see agent-manifest.md
+  // "Relationship to PACT") ----
+  const patchCognition = (partial: Partial<CognitionDraft>) =>
+    patch({ cognition: { ...draft.cognition, ...partial } })
+  const patchPrimaryModel = (partial: Partial<ModelDescriptorDraft>) =>
+    patchCognition({ primaryModel: { ...draft.cognition.primaryModel, ...partial } })
+  const patchFallbackModel = (partial: Partial<ModelDescriptorDraft>) =>
+    patchCognition({ fallbackModel: { ...draft.cognition.fallbackModel, ...partial } })
+  const patchContract = (partial: Partial<ContractDraft>) =>
+    patch({ contract: { ...draft.contract, ...partial } })
+  const setInterface = (i: number, partial: Partial<InterfaceEndpointDraft>) =>
+    patch({
+      interfaces: draft.interfaces.map((e, idx) => (idx === i ? { ...e, ...partial } : e)),
+    })
+  const addInterface = () => patch({ interfaces: [...draft.interfaces, emptyInterfaceEndpoint()] })
+  const removeInterface = (i: number) =>
+    patch({ interfaces: draft.interfaces.filter((_, idx) => idx !== i) })
 
   // ---- memory layers (toggle set) ----
   const toggleLayer = (layer: MemoryLayer) => {
@@ -371,6 +394,80 @@ export function AgentDesigner({ draft, onChange, editingExisting }: Props) {
           </div>
         ))}
         <button className="add" onClick={addGuardrail}>+ Add guardrail</button>
+      </Section>
+
+      <Section
+        title="Cognition (PACT)"
+        hint="What kind of reasoning this agent exposes, vendor-neutrally. Declarative only — not enforced by the runtime, by design (PACT §31)."
+      >
+        <div className="grid two">
+          <Field label="Modalities" hint="Comma-separated, e.g. text, image">
+            <TextInput value={draft.cognition.modalitiesText} onChange={(v) => patchCognition({ modalitiesText: v })} placeholder="text, image" mono />
+          </Field>
+          <Field label="Cognitive capabilities" hint="Comma-separated, e.g. reasoning, planning">
+            <TextInput value={draft.cognition.capabilitiesText} onChange={(v) => patchCognition({ capabilitiesText: v })} placeholder="reasoning, planning" mono />
+          </Field>
+        </div>
+
+        <div className="sub">Primary model — semantic, not an alias like the Model section above</div>
+        <div className="grid three">
+          <Field label="Provider"><TextInput value={draft.cognition.primaryModel.provider} onChange={(v) => patchPrimaryModel({ provider: v })} placeholder="anthropic" mono /></Field>
+          <Field label="Family"><TextInput value={draft.cognition.primaryModel.family} onChange={(v) => patchPrimaryModel({ family: v })} placeholder="claude" mono /></Field>
+          <Field label="Name" hint="Optional concrete model"><TextInput value={draft.cognition.primaryModel.name} onChange={(v) => patchPrimaryModel({ name: v })} mono /></Field>
+        </div>
+
+        <div className="sub">Fallback model</div>
+        <div className="grid three">
+          <Field label="Provider"><TextInput value={draft.cognition.fallbackModel.provider} onChange={(v) => patchFallbackModel({ provider: v })} placeholder="openai" mono /></Field>
+          <Field label="Family"><TextInput value={draft.cognition.fallbackModel.family} onChange={(v) => patchFallbackModel({ family: v })} placeholder="gpt" mono /></Field>
+          <Field label="Name" hint="Optional concrete model"><TextInput value={draft.cognition.fallbackModel.name} onChange={(v) => patchFallbackModel({ name: v })} mono /></Field>
+        </div>
+
+        <div className="sub">Requirements — what the hosting substrate must provide, not what this agent offers</div>
+        <div className="grid three">
+          <Field label="Required modalities" hint="Comma-separated"><TextInput value={draft.cognition.requiredModalitiesText} onChange={(v) => patchCognition({ requiredModalitiesText: v })} placeholder="text" mono /></Field>
+          <Field label="Required capabilities" hint="Comma-separated"><TextInput value={draft.cognition.requiredCapabilitiesText} onChange={(v) => patchCognition({ requiredCapabilitiesText: v })} placeholder="reasoning" mono /></Field>
+          <Field label="Min context window" hint="Tokens"><TextInput value={draft.cognition.contextWindowMinimum} onChange={(v) => patchCognition({ contextWindowMinimum: v })} placeholder="64000" mono /></Field>
+        </div>
+      </Section>
+
+      <Section
+        title="Contract (PACT)"
+        hint="Basic semantic conditions this agent claims to operate under. Declarative only — not a security control; use Allowed roles and Guardrails above for anything actually enforced."
+      >
+        <div className="grid two">
+          <Field label="Autonomy level" hint="0 passive · 1 assistive · 2 recommending · 3 executing · 4 autonomous">
+            <Select
+              value={draft.contract.autonomyLevel}
+              options={['', '0', '1', '2', '3', '4'] as const}
+              onChange={(v) => patchContract({ autonomyLevel: v })}
+            />
+          </Field>
+          <Field label="Permissions" hint="Comma-separated; claimed, not granted — no controlled vocabulary">
+            <TextInput value={draft.contract.permissionsText} onChange={(v) => patchContract({ permissionsText: v })} placeholder="read_repository" mono />
+          </Field>
+        </div>
+      </Section>
+
+      <Section
+        title="Interfaces (PACT)"
+        hint="How another system may reach this agent, beyond the built-in A2A endpoint every agent already exposes at /.well-known/agent.json."
+      >
+        {draft.interfaces.length === 0 && <p className="empty">No additional interfaces declared.</p>}
+        {draft.interfaces.map((e, i) => (
+          <div className="card" key={i}>
+            <div className="card-head">
+              <strong>Interface {i + 1}</strong>
+              <button className="link danger" onClick={() => removeInterface(i)}>remove</button>
+            </div>
+            <div className="grid three">
+              <Field label="Protocol" required><TextInput value={e.protocol} onChange={(v) => setInterface(i, { protocol: v })} placeholder="a2a" mono /></Field>
+              <Field label="Endpoint" required><TextInput value={e.endpoint} onChange={(v) => setInterface(i, { endpoint: v })} placeholder="https://.../.well-known/agent.json" mono /></Field>
+              <Field label="Version"><TextInput value={e.version} onChange={(v) => setInterface(i, { version: v })} placeholder="1.0" mono /></Field>
+            </div>
+          </div>
+        ))}
+        <button className="add" onClick={addInterface}>+ Add interface</button>
       </Section>
     </div>
   )

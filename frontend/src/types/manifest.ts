@@ -100,6 +100,43 @@ export interface Loadout {
   resources?: ResourceRef[]
 }
 
+// PACT Core (ai.gargantua.core.pact) — see gargantua-studio's agent-manifest.md
+// "Relationship to PACT". Declarative only, no runtime enforcement by design.
+export interface ModelDescriptor {
+  provider?: string
+  family?: string
+  name?: string
+}
+
+export interface CognitionModels {
+  primary?: ModelDescriptor
+  fallback?: ModelDescriptor
+}
+
+export interface CognitionRequirements {
+  modalities?: { required?: string[] }
+  capabilities?: { required?: string[] }
+  contextWindow?: { minimum?: number }
+}
+
+export interface Cognition {
+  modalities?: string[]
+  capabilities?: string[]
+  models?: CognitionModels
+  requirements?: CognitionRequirements
+}
+
+export interface Contract {
+  autonomy?: { level?: number }
+  permissions?: string[]
+}
+
+export interface InterfaceEndpoint {
+  protocol: string
+  endpoint: string
+  version?: string
+}
+
 export interface AgentSpec {
   runtime?: RuntimeSpec
   capabilities?: Capability[]
@@ -110,6 +147,9 @@ export interface AgentSpec {
   allowedRoles?: string[]
   guardrails?: Record<string, unknown>
   loadout?: Loadout
+  cognition?: Cognition
+  contract?: Contract
+  interfaces?: InterfaceEndpoint[]
 }
 
 export interface AgentManifest {

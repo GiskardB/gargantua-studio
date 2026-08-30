@@ -7,6 +7,13 @@ import ai.gargantua.core.mcp.McpAuth;
 import ai.gargantua.core.mcp.McpServerSpec;
 import ai.gargantua.core.mcp.McpTransport;
 import ai.gargantua.core.memory.MemoryLayer;
+import ai.gargantua.core.pact.Autonomy;
+import ai.gargantua.core.pact.Cognition;
+import ai.gargantua.core.pact.CognitionModels;
+import ai.gargantua.core.pact.CognitionRequirements;
+import ai.gargantua.core.pact.Contract;
+import ai.gargantua.core.pact.InterfaceEndpoint;
+import ai.gargantua.core.pact.ModelDescriptor;
 import ai.gargantua.core.workload.AgentSpec;
 import ai.gargantua.core.workload.KnowledgeRef;
 import ai.gargantua.core.workload.Loadout;
@@ -142,6 +149,26 @@ public class ManifestBuilder {
                 errors.add(e.getMessage() + " (use private, internal or public)");
             }
         }
+        AgentDraftRequest.Cognition cognition = draft.cognition();
+        if (cognition != null && !isBlank(cognition.contextWindowMinimum())
+                && parseInt(cognition.contextWindowMinimum()) == null) {
+            errors.add("cognition.requirements.contextWindow.minimum must be an integer");
+        }
+        AgentDraftRequest.Contract contract = draft.contract();
+        if (contract != null && !isBlank(contract.autonomyLevel())) {
+            Integer level = parseInt(contract.autonomyLevel());
+            if (level == null || level < 0 || level > 4) {
+                errors.add("contract.autonomy.level must be an integer between 0 and 4");
+            }
+        }
+        for (AgentDraftRequest.InterfaceEndpoint i : draft.interfaces()) {
+            if (isBlank(i.protocol())) {
+                errors.add("interface protocol is required");
+            }
+            if (isBlank(i.endpoint())) {
+                errors.add("interface endpoint is required");
+            }
+        }
         return errors;
     }
 
@@ -176,7 +203,51 @@ public class ManifestBuilder {
                 guardrailDrafts(spec.guardrails()),
                 loadoutDraft(spec.loadout()),
                 governanceDraft(md.governance()),
-                List.of());
+                List.of(),
+                cognitionDraft(spec.cognition()),
+                contractDraft(spec.contract()),
+                interfaceDrafts(spec.interfaces()));
+    }
+
+    private AgentDraftRequest.Cognition cognitionDraft(Cognition c) {
+        if (c == null || c.isEmpty()) {
+            return AgentDraftRequest.Cognition.empty();
+        }
+        CognitionRequirements req = c.requirements();
+        return new AgentDraftRequest.Cognition(
+                joinCsv(c.modalities()),
+                joinCsv(c.capabilities()),
+                modelDescriptorDraft(c.models() == null ? null : c.models().primary()),
+                modelDescriptorDraft(c.models() == null ? null : c.models().fallback()),
+                req == null ? "" : joinCsv(req.modalities()),
+                req == null ? "" : joinCsv(req.capabilities()),
+                req == null ? "" : numberToString(req.contextWindowMinimum()));
+    }
+
+    private AgentDraftRequest.ModelDescriptor modelDescriptorDraft(ModelDescriptor d) {
+        if (d == null) {
+            return AgentDraftRequest.ModelDescriptor.empty();
+        }
+        return new AgentDraftRequest.ModelDescriptor(
+                nullToEmpty(d.provider()), nullToEmpty(d.family()), nullToEmpty(d.name()));
+    }
+
+    private AgentDraftRequest.Contract contractDraft(Contract c) {
+        if (c == null || c.isEmpty()) {
+            return AgentDraftRequest.Contract.empty();
+        }
+        return new AgentDraftRequest.Contract(
+                c.autonomy() == null ? "" : String.valueOf(c.autonomy().level()),
+                joinCsv(c.permissions()));
+    }
+
+    private List<AgentDraftRequest.InterfaceEndpoint> interfaceDrafts(List<InterfaceEndpoint> endpoints) {
+        List<AgentDraftRequest.InterfaceEndpoint> out = new ArrayList<>();
+        for (InterfaceEndpoint e : endpoints) {
+            out.add(new AgentDraftRequest.InterfaceEndpoint(
+                    nullToEmpty(e.protocol()), nullToEmpty(e.endpoint()), nullToEmpty(e.version())));
+        }
+        return out;
     }
 
     private List<AgentDraftRequest.Capability> capabilityDrafts(List<Capability> caps) {
@@ -302,9 +373,77 @@ public class ManifestBuilder {
                 trimToNull(draft.defaultSkill()),
                 guardrails(draft.guardrails()),
                 new LinkedHashSet<>(parseCsv(draft.allowedRolesText())),
-                loadout(draft.loadout()));
+                loadout(draft.loadout()),
+                cognition(draft.cognition()),
+                contract(draft.contract()),
+                interfaces(draft.interfaces()));
 
         return WorkloadManifest.agent(metadata, spec);
+    }
+
+    private Cognition cognition(AgentDraftRequest.Cognition c) {
+        if (c == null) {
+            return Cognition.none();
+        }
+        CognitionModels models = cognitionModels(c.primaryModel(), c.fallbackModel());
+        CognitionRequirements requirements = cognitionRequirements(c);
+        return new Cognition(
+                new LinkedHashSet<>(parseCsv(c.modalitiesText())),
+                new LinkedHashSet<>(parseCsv(c.capabilitiesText())),
+                models,
+                requirements);
+    }
+
+    private CognitionModels cognitionModels(AgentDraftRequest.ModelDescriptor primary,
+                                            AgentDraftRequest.ModelDescriptor fallback) {
+        ModelDescriptor primaryModel = modelDescriptor(primary);
+        ModelDescriptor fallbackModel = modelDescriptor(fallback);
+        if (primaryModel == null && fallbackModel == null) {
+            return null;
+        }
+        return new CognitionModels(primaryModel, fallbackModel);
+    }
+
+    private ModelDescriptor modelDescriptor(AgentDraftRequest.ModelDescriptor d) {
+        if (d == null || (isBlank(d.provider()) && isBlank(d.family()) && isBlank(d.name()))) {
+            return null;
+        }
+        return new ModelDescriptor(trimToNull(d.provider()), trimToNull(d.family()), trimToNull(d.name()));
+    }
+
+    private CognitionRequirements cognitionRequirements(AgentDraftRequest.Cognition c) {
+        List<String> requiredModalities = parseCsv(c.requiredModalitiesText());
+        List<String> requiredCapabilities = parseCsv(c.requiredCapabilitiesText());
+        Integer contextWindowMinimum = parseInt(c.contextWindowMinimum());
+        if (requiredModalities.isEmpty() && requiredCapabilities.isEmpty() && contextWindowMinimum == null) {
+            return null;
+        }
+        return new CognitionRequirements(
+                new LinkedHashSet<>(requiredModalities), new LinkedHashSet<>(requiredCapabilities), contextWindowMinimum);
+    }
+
+    private Contract contract(AgentDraftRequest.Contract c) {
+        if (c == null) {
+            return Contract.none();
+        }
+        Integer level = parseInt(c.autonomyLevel());
+        return new Contract(
+                level == null ? null : Autonomy.ofLevel(level),
+                new LinkedHashSet<>(parseCsv(c.permissionsText())));
+    }
+
+    private List<InterfaceEndpoint> interfaces(List<AgentDraftRequest.InterfaceEndpoint> endpoints) {
+        List<InterfaceEndpoint> out = new ArrayList<>();
+        for (AgentDraftRequest.InterfaceEndpoint e : endpoints) {
+            if (isBlank(e.protocol())) {
+                throw new IllegalArgumentException("interface protocol is required");
+            }
+            if (isBlank(e.endpoint())) {
+                throw new IllegalArgumentException("interface endpoint is required");
+            }
+            out.add(new InterfaceEndpoint(trimToNull(e.protocol()), trimToNull(e.endpoint()), trimToNull(e.version())));
+        }
+        return out;
     }
 
     private Loadout loadout(AgentDraftRequest.Loadout l) {
@@ -551,6 +690,28 @@ public class ManifestBuilder {
             specNode.put("loadout", loadoutNode);
         }
 
+        Map<String, Object> cognitionNode = cognitionNode(spec.cognition());
+        if (!cognitionNode.isEmpty()) {
+            specNode.put("cognition", cognitionNode);
+        }
+
+        Map<String, Object> contractNode = contractNode(spec.contract());
+        if (!contractNode.isEmpty()) {
+            specNode.put("contract", contractNode);
+        }
+
+        if (!spec.interfaces().isEmpty()) {
+            List<Object> endpoints = new ArrayList<>();
+            for (InterfaceEndpoint e : spec.interfaces()) {
+                Map<String, Object> en = new LinkedHashMap<>();
+                en.put("protocol", e.protocol());
+                en.put("endpoint", e.endpoint());
+                putIfPresent(en, "version", e.version());
+                endpoints.add(en);
+            }
+            specNode.put("interfaces", endpoints);
+        }
+
         root.put("spec", specNode);
 
         try {
@@ -611,6 +772,70 @@ public class ManifestBuilder {
                 rs.add(rn);
             }
             node.put("resources", rs);
+        }
+        return node;
+    }
+
+    private Map<String, Object> cognitionNode(Cognition c) {
+        Map<String, Object> node = new LinkedHashMap<>();
+        if (c == null || c.isEmpty()) {
+            return node;
+        }
+        if (!c.modalities().isEmpty()) {
+            node.put("modalities", new ArrayList<>(c.modalities()));
+        }
+        if (!c.capabilities().isEmpty()) {
+            node.put("capabilities", new ArrayList<>(c.capabilities()));
+        }
+        if (c.models() != null) {
+            Map<String, Object> modelsNode = new LinkedHashMap<>();
+            putModelDescriptor(modelsNode, "primary", c.models().primary());
+            putModelDescriptor(modelsNode, "fallback", c.models().fallback());
+            if (!modelsNode.isEmpty()) {
+                node.put("models", modelsNode);
+            }
+        }
+        if (c.requirements() != null) {
+            Map<String, Object> reqNode = new LinkedHashMap<>();
+            if (!c.requirements().modalities().isEmpty()) {
+                reqNode.put("modalities", Map.of("required", new ArrayList<>(c.requirements().modalities())));
+            }
+            if (!c.requirements().capabilities().isEmpty()) {
+                reqNode.put("capabilities", Map.of("required", new ArrayList<>(c.requirements().capabilities())));
+            }
+            if (c.requirements().contextWindowMinimum() != null) {
+                reqNode.put("contextWindow", Map.of("minimum", c.requirements().contextWindowMinimum()));
+            }
+            if (!reqNode.isEmpty()) {
+                node.put("requirements", reqNode);
+            }
+        }
+        return node;
+    }
+
+    private void putModelDescriptor(Map<String, Object> parent, String key, ModelDescriptor d) {
+        if (d == null) {
+            return;
+        }
+        Map<String, Object> node = new LinkedHashMap<>();
+        putIfPresent(node, "provider", d.provider());
+        putIfPresent(node, "family", d.family());
+        putIfPresent(node, "name", d.name());
+        if (!node.isEmpty()) {
+            parent.put(key, node);
+        }
+    }
+
+    private Map<String, Object> contractNode(Contract c) {
+        Map<String, Object> node = new LinkedHashMap<>();
+        if (c == null || c.isEmpty()) {
+            return node;
+        }
+        if (c.autonomy() != null) {
+            node.put("autonomy", Map.of("level", c.autonomy().level()));
+        }
+        if (!c.permissions().isEmpty()) {
+            node.put("permissions", new ArrayList<>(c.permissions()));
         }
         return node;
     }

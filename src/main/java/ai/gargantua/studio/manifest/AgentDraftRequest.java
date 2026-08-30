@@ -25,7 +25,10 @@ public record AgentDraftRequest(
         List<Guardrail> guardrails,
         Loadout loadout,
         Governance governance,
-        List<SkillDraftRequest> skills) {
+        List<SkillDraftRequest> skills,
+        Cognition cognition,
+        Contract contract,
+        List<InterfaceEndpoint> interfaces) {
 
     public AgentDraftRequest {
         capabilities = capabilities == null ? List.of() : capabilities;
@@ -35,6 +38,28 @@ public record AgentDraftRequest(
         loadout = loadout == null ? Loadout.empty() : loadout;
         governance = governance == null ? Governance.empty() : governance;
         skills = skills == null ? List.of() : skills;
+        cognition = cognition == null ? Cognition.empty() : cognition;
+        contract = contract == null ? Contract.empty() : contract;
+        interfaces = interfaces == null ? List.of() : interfaces;
+    }
+
+    /** Back-compat overload for callers that predate the PACT Core fields (cognition/contract/interfaces). */
+    public AgentDraftRequest(
+            Metadata metadata,
+            Runtime runtime,
+            Model model,
+            List<Capability> capabilities,
+            List<McpServer> mcpServers,
+            List<String> memoryLayers,
+            String defaultSkill,
+            String allowedRolesText,
+            List<Guardrail> guardrails,
+            Loadout loadout,
+            Governance governance,
+            List<SkillDraftRequest> skills) {
+        this(metadata, runtime, model, capabilities, mcpServers, memoryLayers, defaultSkill,
+                allowedRolesText, guardrails, loadout, governance, skills,
+                Cognition.empty(), Contract.empty(), List.of());
     }
 
     /** Back-compat overload for callers that predate the {@code skills} field. */
@@ -146,5 +171,56 @@ public record AgentDraftRequest(
         public static Governance empty() {
             return new Governance("", "", "", "");
         }
+    }
+
+    /**
+     * PACT Core's "Cognition" pillar, form-friendly: open-vocabulary lists are
+     * comma-separated text, same convention as {@code Capability.tags}. Declarative only
+     * — see {@code core.pact.Cognition} in the shared domain model.
+     */
+    public record Cognition(
+            String modalitiesText,
+            String capabilitiesText,
+            ModelDescriptor primaryModel,
+            ModelDescriptor fallbackModel,
+            String requiredModalitiesText,
+            String requiredCapabilitiesText,
+            String contextWindowMinimum) {
+
+        public Cognition {
+            primaryModel = primaryModel == null ? ModelDescriptor.empty() : primaryModel;
+            fallbackModel = fallbackModel == null ? ModelDescriptor.empty() : fallbackModel;
+        }
+
+        public static Cognition empty() {
+            return new Cognition("", "", ModelDescriptor.empty(), ModelDescriptor.empty(), "", "", "");
+        }
+    }
+
+    /** A semantic (not operational) model family reference — see {@code core.pact.ModelDescriptor}. */
+    public record ModelDescriptor(String provider, String family, String name) {
+
+        public static ModelDescriptor empty() {
+            return new ModelDescriptor("", "", "");
+        }
+    }
+
+    /**
+     * PACT Core's "Contract" pillar, form-friendly. {@code autonomyLevel} is the plain
+     * {@code 0}-{@code 4} wire value (blank = undeclared); {@code permissionsText} is
+     * comma-separated, no controlled vocabulary — see {@code core.pact.Contract}.
+     */
+    public record Contract(String autonomyLevel, String permissionsText) {
+
+        public static Contract empty() {
+            return new Contract("", "");
+        }
+    }
+
+    /**
+     * PACT Core's "Interfaces" pillar: how another system may reach this agent — see
+     * {@code core.pact.InterfaceEndpoint}.
+     */
+    public record InterfaceEndpoint(String protocol, String endpoint, String version) {
     }
 }

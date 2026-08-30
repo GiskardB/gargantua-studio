@@ -101,6 +101,27 @@ export function validateDraft(d: AgentDraft): Issue[] {
     }
   })
 
+  // --- PACT Core: cognition (Cognition), contract (Contract + Autonomy),
+  // interfaces (InterfaceEndpoint) — declarative, but still structurally validated
+  // the same way the Runtime rejects a malformed manifest.
+  const contextWindow = parseOptionalNumber(d.cognition.contextWindowMinimum)
+  if (d.cognition.contextWindowMinimum.trim() !== '' && contextWindow === undefined)
+    err('cognition.requirements.contextWindow.minimum', 'Context window minimum must be a number.')
+  if (contextWindow !== undefined && contextWindow <= 0)
+    err('cognition.requirements.contextWindow.minimum', 'Context window minimum must be positive.')
+
+  if (d.contract.autonomyLevel.trim() !== '') {
+    const level = parseOptionalNumber(d.contract.autonomyLevel)
+    if (level === undefined || level < 0 || level > 4 || !Number.isInteger(level))
+      err('contract.autonomy.level', 'Autonomy level must be an integer between 0 and 4.')
+  }
+
+  d.interfaces.forEach((i, idx) => {
+    const label = `interfaces[${idx}]`
+    if (!i.protocol.trim()) err(`${label}.protocol`, 'Interface protocol is required.')
+    if (!i.endpoint.trim()) err(`${label}.endpoint`, 'Interface endpoint is required.')
+  })
+
   return issues
 }
 

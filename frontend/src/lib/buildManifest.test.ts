@@ -70,6 +70,41 @@ describe('buildManifest', () => {
       status: 'active',
       access: ['support-agent', 'super-admin'],
     })
+
+    // PACT Core: cognition/contract/interfaces.
+    expect(m.spec.cognition?.modalities).toEqual(['text'])
+    expect(m.spec.cognition?.capabilities).toEqual(['reasoning', 'planning'])
+    expect(m.spec.cognition?.models?.primary).toEqual({ provider: 'anthropic', family: 'claude' })
+    expect(m.spec.cognition?.models?.fallback).toBeUndefined()
+    expect(m.spec.cognition?.requirements).toBeUndefined()
+
+    expect(m.spec.contract?.autonomy).toEqual({ level: 2 })
+    expect(m.spec.contract?.permissions).toEqual(['read_repository'])
+
+    expect(m.spec.interfaces).toEqual([
+      {
+        protocol: 'a2a',
+        endpoint: 'https://agents.internal/customer-agent/.well-known/agent.json',
+        version: '1.0',
+      },
+    ])
+  })
+
+  it('omits cognition/contract/interfaces entirely when nothing is declared', () => {
+    const d = emptyDraft()
+    d.metadata.name = 'a'
+    d.metadata.version = '1.0.0'
+    const m = buildManifest(d)
+    expect(m.spec.cognition).toBeUndefined()
+    expect(m.spec.contract).toBeUndefined()
+    expect(m.spec.interfaces).toBeUndefined()
+  })
+
+  it('drops an interface entry left without a protocol or endpoint', () => {
+    const d = sampleDraft()
+    d.interfaces.push({ protocol: '', endpoint: '', version: '' })
+    const m = buildManifest(d)
+    expect(m.spec.interfaces).toHaveLength(1)
   })
 
   it('serializes to YAML in schema order with secret placeholders intact', () => {
@@ -107,5 +142,19 @@ describe('validateDraft', () => {
     const d = sampleDraft()
     d.guardrails[0].settingsJson = '{ not json'
     expect(validateDraft(d).some((i) => i.path === 'guardrails[0].settings')).toBe(true)
+  })
+
+  it('rejects an out-of-range autonomy level', () => {
+    const d = sampleDraft()
+    d.contract.autonomyLevel = '9'
+    expect(validateDraft(d).some((i) => i.path === 'contract.autonomy.level')).toBe(true)
+  })
+
+  it('rejects an interface missing its protocol or endpoint', () => {
+    const d = sampleDraft()
+    d.interfaces.push({ protocol: '', endpoint: '', version: '' })
+    const issues = validateDraft(d)
+    expect(issues.some((i) => i.path === 'interfaces[1].protocol')).toBe(true)
+    expect(issues.some((i) => i.path === 'interfaces[1].endpoint')).toBe(true)
   })
 })

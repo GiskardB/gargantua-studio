@@ -20,6 +20,10 @@ import {
   type KnowledgeRef,
   type ResourceRef,
   type Governance,
+  type Cognition,
+  type Contract,
+  type InterfaceEndpoint,
+  type ModelDescriptor,
 } from '../types/manifest'
 import type { AgentDraft } from '../types/draft'
 import { parseArgs, parseCsv, parseKeyValueLines, parseOptionalNumber } from './parse'
@@ -194,6 +198,67 @@ function buildLoadout(d: AgentDraft): Loadout | undefined {
   return Object.keys(loadout).length > 0 ? loadout : undefined
 }
 
+function buildModelDescriptor(m: { provider: string; family: string; name: string }): ModelDescriptor | undefined {
+  const descriptor: ModelDescriptor = {}
+  const provider = nonEmpty(m.provider)
+  if (provider) descriptor.provider = provider
+  const family = nonEmpty(m.family)
+  if (family) descriptor.family = family
+  const name = nonEmpty(m.name)
+  if (name) descriptor.name = name
+  return Object.keys(descriptor).length > 0 ? descriptor : undefined
+}
+
+function buildCognition(d: AgentDraft): Cognition | undefined {
+  const c = d.cognition
+  const cognition: Cognition = {}
+  const modalities = parseCsv(c.modalitiesText)
+  if (modalities.length > 0) cognition.modalities = modalities
+  const capabilities = parseCsv(c.capabilitiesText)
+  if (capabilities.length > 0) cognition.capabilities = capabilities
+
+  const primary = buildModelDescriptor(c.primaryModel)
+  const fallback = buildModelDescriptor(c.fallbackModel)
+  if (primary || fallback) {
+    cognition.models = {}
+    if (primary) cognition.models.primary = primary
+    if (fallback) cognition.models.fallback = fallback
+  }
+
+  const requiredModalities = parseCsv(c.requiredModalitiesText)
+  const requiredCapabilities = parseCsv(c.requiredCapabilitiesText)
+  const contextWindowMinimum = parseOptionalNumber(c.contextWindowMinimum)
+  if (requiredModalities.length > 0 || requiredCapabilities.length > 0 || contextWindowMinimum !== undefined) {
+    cognition.requirements = {}
+    if (requiredModalities.length > 0) cognition.requirements.modalities = { required: requiredModalities }
+    if (requiredCapabilities.length > 0) cognition.requirements.capabilities = { required: requiredCapabilities }
+    if (contextWindowMinimum !== undefined) cognition.requirements.contextWindow = { minimum: contextWindowMinimum }
+  }
+
+  return Object.keys(cognition).length > 0 ? cognition : undefined
+}
+
+function buildContract(d: AgentDraft): Contract | undefined {
+  const c = d.contract
+  const contract: Contract = {}
+  const level = parseOptionalNumber(c.autonomyLevel)
+  if (level !== undefined) contract.autonomy = { level }
+  const permissions = parseCsv(c.permissionsText)
+  if (permissions.length > 0) contract.permissions = permissions
+  return Object.keys(contract).length > 0 ? contract : undefined
+}
+
+function buildInterfaces(d: AgentDraft): InterfaceEndpoint[] {
+  return d.interfaces
+    .filter((i) => nonEmpty(i.protocol) && nonEmpty(i.endpoint))
+    .map((i) => {
+      const endpoint: InterfaceEndpoint = { protocol: i.protocol.trim(), endpoint: i.endpoint.trim() }
+      const version = nonEmpty(i.version)
+      if (version) endpoint.version = version
+      return endpoint
+    })
+}
+
 export function buildManifest(d: AgentDraft): AgentManifest {
   const spec: AgentSpec = {}
 
@@ -222,6 +287,15 @@ export function buildManifest(d: AgentDraft): AgentManifest {
 
   const loadout = buildLoadout(d)
   if (loadout) spec.loadout = loadout
+
+  const cognition = buildCognition(d)
+  if (cognition) spec.cognition = cognition
+
+  const contract = buildContract(d)
+  if (contract) spec.contract = contract
+
+  const interfaces = buildInterfaces(d)
+  if (interfaces.length > 0) spec.interfaces = interfaces
 
   return {
     apiVersion: API_VERSION,

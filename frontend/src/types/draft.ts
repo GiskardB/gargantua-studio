@@ -71,6 +71,37 @@ export interface GovernanceDraft {
   accessText: string // comma-separated ACL (roles/principals)
 }
 
+// ---- PACT Core: cognition/contract/interfaces (declarative — see agent-manifest.md
+// "Relationship to PACT"). autonomyLevel/contextWindowMinimum stay stringly, same
+// convention as temperature/maxTokens above.
+
+export interface ModelDescriptorDraft {
+  provider: string
+  family: string
+  name: string
+}
+
+export interface CognitionDraft {
+  modalitiesText: string // comma-separated, e.g. "text, image"
+  capabilitiesText: string // comma-separated, e.g. "reasoning, planning"
+  primaryModel: ModelDescriptorDraft
+  fallbackModel: ModelDescriptorDraft
+  requiredModalitiesText: string // comma-separated — what the substrate must support
+  requiredCapabilitiesText: string // comma-separated
+  contextWindowMinimum: string // stringly integer
+}
+
+export interface ContractDraft {
+  autonomyLevel: string // stringly '0'-'4'; '' = undeclared
+  permissionsText: string // comma-separated, no controlled vocabulary
+}
+
+export interface InterfaceEndpointDraft {
+  protocol: string // e.g. a2a, mcp, http
+  endpoint: string
+  version: string
+}
+
 export interface AgentDraft {
   metadata: {
     name: string
@@ -98,6 +129,9 @@ export interface AgentDraft {
   guardrails: GuardrailDraft[]
   loadout: LoadoutDraft
   governance: GovernanceDraft
+  cognition: CognitionDraft
+  contract: ContractDraft
+  interfaces: InterfaceEndpointDraft[]
 }
 
 export function emptyCapability(): CapabilityDraft {
@@ -182,6 +216,30 @@ export function emptyGovernance(): GovernanceDraft {
   return { tenant: '', visibility: '', status: '', accessText: '' }
 }
 
+export function emptyModelDescriptor(): ModelDescriptorDraft {
+  return { provider: '', family: '', name: '' }
+}
+
+export function emptyCognition(): CognitionDraft {
+  return {
+    modalitiesText: '',
+    capabilitiesText: '',
+    primaryModel: emptyModelDescriptor(),
+    fallbackModel: emptyModelDescriptor(),
+    requiredModalitiesText: '',
+    requiredCapabilitiesText: '',
+    contextWindowMinimum: '',
+  }
+}
+
+export function emptyContract(): ContractDraft {
+  return { autonomyLevel: '', permissionsText: '' }
+}
+
+export function emptyInterfaceEndpoint(): InterfaceEndpointDraft {
+  return { protocol: '', endpoint: '', version: '' }
+}
+
 export function emptyDraft(): AgentDraft {
   return {
     metadata: { name: '', version: '', description: '', owner: '', labelsText: '' },
@@ -195,6 +253,9 @@ export function emptyDraft(): AgentDraft {
     guardrails: [],
     loadout: emptyLoadout(),
     governance: emptyGovernance(),
+    cognition: emptyCognition(),
+    contract: emptyContract(),
+    interfaces: [],
   }
 }
 
@@ -292,5 +353,25 @@ export function sampleDraft(): AgentDraft {
       status: 'active',
       accessText: 'support-agent, super-admin',
     },
+    cognition: {
+      modalitiesText: 'text',
+      capabilitiesText: 'reasoning, planning',
+      primaryModel: { provider: 'anthropic', family: 'claude', name: '' },
+      fallbackModel: emptyModelDescriptor(),
+      requiredModalitiesText: '',
+      requiredCapabilitiesText: '',
+      contextWindowMinimum: '',
+    },
+    contract: {
+      autonomyLevel: '2',
+      permissionsText: 'read_repository',
+    },
+    interfaces: [
+      {
+        protocol: 'a2a',
+        endpoint: 'https://agents.internal/customer-agent/.well-known/agent.json',
+        version: '1.0',
+      },
+    ],
   }
 }

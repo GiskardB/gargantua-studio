@@ -61,7 +61,16 @@ class ManifestBuilderTest {
                         "refund-skill, status-skill",
                         List.of(new AgentDraftRequest.ResourceRef(
                                 "refund-form", "file", "resources/refund.pdf"))),
-                new AgentDraftRequest.Governance("acme", "internal", "active", "ops, support"));
+                new AgentDraftRequest.Governance("acme", "internal", "active", "ops, support"),
+                List.of(),
+                new AgentDraftRequest.Cognition(
+                        "text", "reasoning, planning",
+                        new AgentDraftRequest.ModelDescriptor("anthropic", "claude", ""),
+                        AgentDraftRequest.ModelDescriptor.empty(),
+                        "", "", ""),
+                new AgentDraftRequest.Contract("2", "read_repository"),
+                List.of(new AgentDraftRequest.InterfaceEndpoint(
+                        "a2a", "https://example.com/a2a", "1.0")));
     }
 
     @Test
@@ -93,6 +102,16 @@ class ManifestBuilderTest {
         assertThat(yaml).contains("tenant: acme");
         assertThat(yaml).contains("visibility: internal");
         assertThat(yaml).contains("status: active");
+        // PACT Core: cognition/contract/interfaces.
+        assertThat(yaml).contains("cognition:");
+        assertThat(yaml).contains("provider: anthropic");
+        assertThat(yaml).contains("family: claude");
+        assertThat(yaml).contains("contract:");
+        assertThat(yaml).contains("level: 2");
+        assertThat(yaml).contains("permissions:");
+        assertThat(yaml).contains("interfaces:");
+        assertThat(yaml).contains("protocol: a2a");
+        assertThat(yaml).contains("endpoint: https://example.com/a2a");
     }
 
     /**
@@ -154,6 +173,56 @@ class ManifestBuilderTest {
         assertThat(roundTripped.governance().visibility()).isEqualTo("internal");
         assertThat(roundTripped.governance().status()).isEqualTo("active");
         assertThat(roundTripped.governance().accessText()).contains("ops").contains("support");
+
+        assertThat(roundTripped.cognition().modalitiesText()).isEqualTo("text");
+        assertThat(roundTripped.cognition().capabilitiesText()).contains("reasoning").contains("planning");
+        assertThat(roundTripped.cognition().primaryModel().provider()).isEqualTo("anthropic");
+        assertThat(roundTripped.cognition().primaryModel().family()).isEqualTo("claude");
+
+        assertThat(roundTripped.contract().autonomyLevel()).isEqualTo("2");
+        assertThat(roundTripped.contract().permissionsText()).isEqualTo("read_repository");
+
+        assertThat(roundTripped.interfaces()).hasSize(1);
+        assertThat(roundTripped.interfaces().get(0).protocol()).isEqualTo("a2a");
+        assertThat(roundTripped.interfaces().get(0).endpoint()).isEqualTo("https://example.com/a2a");
+        assertThat(roundTripped.interfaces().get(0).version()).isEqualTo("1.0");
+    }
+
+    @Test
+    void anAgentWithNoPactFieldsProducesNoPactYamlSections() {
+        BuildResult result =
+                builder.build(draft(md("agent", "1.0.0"), List.of(), List.of(), emptyModel()));
+        assertThat(result.valid()).isTrue();
+        assertThat(result.yaml()).doesNotContain("cognition:").doesNotContain("contract:").doesNotContain("interfaces:");
+    }
+
+    @Test
+    void outOfRangeAutonomyLevelIsRejected() {
+        AgentDraftRequest draft = draft(md("agent", "1.0.0"), List.of(), List.of(), emptyModel());
+        AgentDraftRequest withContract = new AgentDraftRequest(
+                draft.metadata(), draft.runtime(), draft.model(), draft.capabilities(),
+                draft.mcpServers(), draft.memoryLayers(), draft.defaultSkill(), draft.allowedRolesText(),
+                draft.guardrails(), draft.loadout(), draft.governance(), draft.skills(),
+                draft.cognition(), new AgentDraftRequest.Contract("9", ""), draft.interfaces());
+
+        BuildResult result = builder.build(withContract);
+        assertThat(result.valid()).isFalse();
+        assertThat(result.errors()).anyMatch(e -> e.contains("autonomy.level"));
+    }
+
+    @Test
+    void interfaceWithoutEndpointIsRejected() {
+        AgentDraftRequest draft = draft(md("agent", "1.0.0"), List.of(), List.of(), emptyModel());
+        AgentDraftRequest withInterface = new AgentDraftRequest(
+                draft.metadata(), draft.runtime(), draft.model(), draft.capabilities(),
+                draft.mcpServers(), draft.memoryLayers(), draft.defaultSkill(), draft.allowedRolesText(),
+                draft.guardrails(), draft.loadout(), draft.governance(), draft.skills(),
+                draft.cognition(), draft.contract(),
+                List.of(new AgentDraftRequest.InterfaceEndpoint("a2a", "", "")));
+
+        BuildResult result = builder.build(withInterface);
+        assertThat(result.valid()).isFalse();
+        assertThat(result.errors()).anyMatch(e -> e.contains("interface endpoint"));
     }
 
     @Test
