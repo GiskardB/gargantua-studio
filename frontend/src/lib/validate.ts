@@ -78,6 +78,8 @@ export function validateDraft(d: AgentDraft): Issue[] {
       warn(`${label}.auth`, `Auth type "${s.authType}" usually needs a value.`)
     if (s.authType === 'header' && !s.authHeaderName.trim())
       warn(`${label}.auth`, 'Header auth usually needs a header name.')
+    if (s.transport !== 'stdio' && s.authType === 'none')
+      warn(`${label}.auth`, `${s.transport} server has no authentication — it will call an external endpoint with no credentials.`)
     const key = s.name.trim()
     if (key) serverNames.set(key, (serverNames.get(key) ?? 0) + 1)
   })

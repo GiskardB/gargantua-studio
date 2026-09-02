@@ -33,6 +33,10 @@ describe('buildManifest', () => {
     expect(m.spec.memoryLayers).toEqual(['WORKING', 'EPISODIC'])
     expect(m.spec.allowedRoles).toEqual(['support-agent', 'super-admin'])
 
+    const refund = m.spec.capabilities?.find((c) => c.name === 'refund-payment')
+    expect(refund?.inputSchema).toBe('schemas/refund-input.json')
+    expect(refund?.tags).toEqual(['payments', 'gdpr'])
+
     const payments = m.spec.mcp?.servers.find((s) => s.name === 'payments-api')
     expect(payments?.transport).toBe('http')
     expect(payments?.auth).toEqual({ type: 'bearer', value: '${secrets.payments-api-token}' })
@@ -156,5 +160,18 @@ describe('validateDraft', () => {
     const issues = validateDraft(d)
     expect(issues.some((i) => i.path === 'interfaces[1].protocol')).toBe(true)
     expect(issues.some((i) => i.path === 'interfaces[1].endpoint')).toBe(true)
+  })
+
+  it('warns about a remote MCP server with no authentication', () => {
+    const d = sampleDraft()
+    d.mcpServers[0].authType = 'none' // was bearer; http transport
+    const issues = validateDraft(d)
+    expect(issues.some((i) => i.path === 'mcp.servers[0].auth' && i.severity === 'warning')).toBe(true)
+  })
+
+  it('does not warn about an unauthenticated stdio MCP server', () => {
+    const d = sampleDraft() // d.mcpServers[1] ("github") is stdio with authType 'none'
+    const issues = validateDraft(d)
+    expect(issues.some((i) => i.path === 'mcp.servers[1].auth')).toBe(false)
   })
 })
