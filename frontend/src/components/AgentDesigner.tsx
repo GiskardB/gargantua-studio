@@ -57,6 +57,33 @@ export function AgentDesigner({ draft, onChange, editingExisting }: Props) {
   const patchModel = (partial: Partial<AgentDraft['model']>) =>
     patch({ model: { ...draft.model, ...partial } })
 
+  // Heuristic: parse a model string like "gpt-4o" or "claude-sonnet-4-20250514"
+  // into provider/family/name for the PACT Cognition section.
+  const parseModelString = (s: string): { provider: string; family: string; name: string } => {
+    const t = s.trim().toLowerCase()
+    if (!t) return { provider: '', family: '', name: '' }
+    if (t.includes('gpt')) return { provider: 'openai', family: 'gpt', name: s }
+    if (t.includes('claude')) return { provider: 'anthropic', family: 'claude', name: s }
+    if (t.includes('gemini')) return { provider: 'google', family: 'gemini', name: s }
+    if (t.includes('phi')) return { provider: 'microsoft', family: 'phi', name: s }
+    if (t.includes('llama')) return { provider: 'meta', family: 'llama', name: s }
+    if (t.includes('mistral')) return { provider: 'mistral', family: 'mistral', name: s }
+    if (t.includes('qwen')) return { provider: 'alibaba', family: 'qwen', name: s }
+    if (t.includes('deepseek')) return { provider: 'deepseek', family: 'deepseek', name: s }
+    return { provider: '', family: '', name: s }
+  }
+
+  const setPrimaryModel = (v: string) => {
+    patchModel({ primary: v })
+    const { provider, family, name } = parseModelString(v)
+    patchCognition({ primaryModel: { provider, family, name } })
+  }
+  const setFallbackModel = (v: string) => {
+    patchModel({ fallback: v })
+    const { provider, family, name } = parseModelString(v)
+    patchCognition({ fallbackModel: { provider, family, name } })
+  }
+
   // ---- capabilities (the only place a skill is linked to this agent) ----
   const setCapability = (i: number, partial: Partial<CapabilityDraft>) =>
     patch({
@@ -192,8 +219,8 @@ export function AgentDesigner({ draft, onChange, editingExisting }: Props) {
             <TextInput value={draft.governance.status} onChange={(v) => patchGovernance({ status: v })} placeholder="active" mono />
           </Field>
         </div>
-        <Field label="Access (ACL)" hint="Comma-separated roles/principals granted access beyond what visibility implies">
-          <TextInput value={draft.governance.accessText} onChange={(v) => patchGovernance({ accessText: v })} placeholder="support-agent, super-admin" />
+        <Field label="Access (ACL)" hint="Who can discover/find this agent in the Catalog beyond what Visibility implies — not who can call it (see Allowed roles, under Routing & roles below)">
+          <TextInput value={draft.governance.accessText} onChange={(v) => patchGovernance({ accessText: v })} placeholder="ops, support" />
         </Field>
       </Section>
 
@@ -208,10 +235,10 @@ export function AgentDesigner({ draft, onChange, editingExisting }: Props) {
         </div>
       </Section>
 
-      <Section title="Model" hint="Model names only — endpoints and keys come from the runtime environment.">
+      <Section title="Model" hint="Model names only — endpoints and keys come from the runtime environment. The Cognition section below is filled in automatically from these names (provider/family), so write it here first.">
         <div className="grid three">
-          <Field label="Primary"><TextInput value={draft.model.primary} onChange={(v) => patchModel({ primary: v })} placeholder="gpt-4o" mono /></Field>
-          <Field label="Fallback"><TextInput value={draft.model.fallback} onChange={(v) => patchModel({ fallback: v })} placeholder="claude-sonnet-4-20250514" mono /></Field>
+          <Field label="Primary"><TextInput value={draft.model.primary} onChange={setPrimaryModel} placeholder="gpt-4o" mono /></Field>
+          <Field label="Fallback"><TextInput value={draft.model.fallback} onChange={setFallbackModel} placeholder="claude-sonnet-4-20250514" mono /></Field>
           <Field label="Routing"><TextInput value={draft.model.routing} onChange={(v) => patchModel({ routing: v })} placeholder="phi4-mini" mono /></Field>
         </div>
         <div className="grid two">
@@ -222,7 +249,7 @@ export function AgentDesigner({ draft, onChange, editingExisting }: Props) {
 
       <Section
         title="Capabilities"
-        hint="The external contract callers route on. Every capability is a skill — pick one (write it in the Skill Designer first) and its name, version, description and output schema are derived from it. This is the only place a skill gets linked to this agent."
+        hint="The external contract callers route on. Every capability is a skill — pick one (write it in the Skill Designer first) and its name, version, description and output schema are derived from it. This is the only place a skill becomes an advertised, routable capability — Loadout > Skills below equips extra skills without exposing them externally."
       >
         {draft.capabilities.length === 0 && <p className="empty">No capabilities yet.</p>}
         {draft.capabilities.map((c, i) => (
@@ -231,7 +258,7 @@ export function AgentDesigner({ draft, onChange, editingExisting }: Props) {
               <strong>Capability {i + 1}</strong>
               <button className="link danger" onClick={() => removeCapability(i)}>remove</button>
             </div>
-            <Field label="Skill" required hint="The only field you fill in — everything below comes from it">
+            <Field label="Skill" required hint="Derives name, version, description and output schema. Input schema and tags below are not derived — fill them in yourself.">
               <select value={c.implementedBy} onChange={(e) => setCapabilitySkill(i, e.target.value)}>
                 <option value="">Select a skill…</option>
                 {savedSkills.map((s) => s.draft.name && (
@@ -249,6 +276,14 @@ export function AgentDesigner({ draft, onChange, editingExisting }: Props) {
             ) : (
               <p className="empty">Pick a skill to fill in this capability.</p>
             )}
+            <div className="grid two">
+              <Field label="Input schema" hint="Bundle-relative path or inline schema; not derived from the skill">
+                <TextInput value={c.inputSchema} onChange={(v) => setCapability(i, { inputSchema: v })} placeholder="schemas/refund-input.json" mono />
+              </Field>
+              <Field label="Tags" hint="Comma-separated, for Catalog search/filtering">
+                <TextInput value={c.tags} onChange={(v) => setCapability(i, { tags: v })} placeholder="payments, gdpr" mono />
+              </Field>
+            </div>
           </div>
         ))}
         <button className="add" onClick={addCapability}>+ Add capability</button>
@@ -349,7 +384,7 @@ export function AgentDesigner({ draft, onChange, editingExisting }: Props) {
           <Field label="Memory scopes" hint="Comma-separated named memory collections">
             <TextInput value={draft.loadout.memoryScopesText} onChange={(v) => patchLoadout({ memoryScopesText: v })} placeholder="customer-history" mono />
           </Field>
-          <Field label="Skills" hint="Comma-separated skill names to equip">
+          <Field label="Skills" hint="Comma-separated skill names to equip beyond Default skill — free text, not checked against the Skill Designer; does not advertise a Capability (use the Capabilities section above for that)">
             <TextInput value={draft.loadout.skillsText} onChange={(v) => patchLoadout({ skillsText: v })} placeholder="refund-skill, status-skill" mono />
           </Field>
         </div>
@@ -375,7 +410,7 @@ export function AgentDesigner({ draft, onChange, editingExisting }: Props) {
       <Section title="Routing & roles">
         <div className="grid two">
           <Field label="Default skill" hint="Entry skill; binds to agent.routing.fallback-skill"><TextInput value={draft.defaultSkill} onChange={(v) => patch({ defaultSkill: v })} placeholder="default-skill" mono /></Field>
-          <Field label="Allowed roles" hint="Comma-separated (reported, not yet enforced at workload level)"><TextInput value={draft.allowedRolesText} onChange={(v) => patch({ allowedRolesText: v })} placeholder="support-agent, super-admin" /></Field>
+          <Field label="Allowed roles" hint="Who can invoke this agent at runtime — not who can find it in the Catalog (see Access (ACL), under Governance above). Comma-separated; reported, not yet enforced at workload level"><TextInput value={draft.allowedRolesText} onChange={(v) => patch({ allowedRolesText: v })} placeholder="support-agent, super-admin" /></Field>
         </div>
       </Section>
 
@@ -398,7 +433,7 @@ export function AgentDesigner({ draft, onChange, editingExisting }: Props) {
 
       <Section
         title="Cognition (PACT)"
-        hint="What kind of reasoning this agent exposes, vendor-neutrally. Declarative only — not enforced by the runtime, by design (PACT §31)."
+        hint="What kind of reasoning this agent exposes, vendor-neutrally. Declarative only — not enforced by the runtime, by design (PACT §31). Provider/family are auto-derived from the Primary/Fallback model names in the Model section above (not Routing, which stays operational-only); override here if they differ."
       >
         <div className="grid two">
           <Field label="Modalities" hint="Comma-separated, e.g. text, image">
