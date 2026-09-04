@@ -1,40 +1,64 @@
-// The Agent Designer: a structured form over AgentDraft. Every section maps to a
-// block of the gargantua.ai/v1 spec. State lives one level up in App; this
-// component only reads the draft and emits a new one, so the manifest preview
-// stays in sync with no extra wiring.
+// The Agent Designer: a structured form over AgentDraft. State lives one level
+// up in App; this component only reads the draft and emits a new one, so the
+// manifest preview stays in sync with no extra wiring.
+//
+// Scope is deliberately narrow: this form only asks for what the Runtime
+// actually applies (see gargantua's ManifestProperties.from/.unappliedFields) —
+// Metadata, Governance's own fields, Runtime image, Model, Capabilities +
+// Default skill, MCP servers, Guardrails, Memory layers (agent-wide as of
+// 2026-09 — see AgentProperties.Memory#getEnabledLayers in gargantua; no
+// longer a per-skill SKILL.md concern) — plus Interfaces, limited to A2A and
+// MCP (the two protocols gargantua actually serves as an interface — A2A is
+// always on regardless of what's checked; MCP server mode is a separate
+// deploy-time flag, agent.mcp.enabled — checking the box here doesn't switch
+// anything on, see the section hint). Everything else this form used to
+// expose (Cognition, Contract, Memory scopes, Knowledge bases, Resources,
+// extra equipped Skills, Allowed roles, Runtime min version) is a real field
+// in the shared domain model and still round-trips through buildManifest.ts
+// if a draft already has it set — it's just not authored from this UI,
+// because a control that visibly does nothing is worse than no control at all.
 
 import type {
   AgentDraft,
   CapabilityDraft,
   McpServerDraft,
   GuardrailDraft,
-  LoadoutDraft,
-  KnowledgeRefDraft,
-  ResourceRefDraft,
   GovernanceDraft,
   Visibility,
-  CognitionDraft,
-  ContractDraft,
-  ModelDescriptorDraft,
-  InterfaceEndpointDraft,
 } from '../types/draft'
 import {
   emptyCapability,
   emptyMcpServer,
   emptyGuardrail,
-  emptyKnowledgeRef,
-  emptyResourceRef,
-  emptyInterfaceEndpoint,
   applySkillToCapability,
 } from '../types/draft'
-import {
-  MCP_TRANSPORTS,
-  MCP_AUTH_TYPES,
-  MEMORY_LAYERS,
-  type MemoryLayer,
-} from '../types/manifest'
+import { MCP_TRANSPORTS, MCP_AUTH_TYPES, MEMORY_LAYERS, type MemoryLayer } from '../types/manifest'
 import { Section, Field, TextInput, TextArea, Select, Checkbox } from './fields'
 import { useSkillsStore } from '../store/skillsStore'
+
+// Display-only labels — the wire value stays the real MemoryLayer enum
+// (KNOWLEDGE), but "Knowledge" as a label collides with the unrelated
+// Knowledge-base/RAG feature this form no longer even shows, so it's labelled
+// for what it actually stores.
+const MEMORY_LAYER_LABELS: Record<MemoryLayer, string> = {
+  WORKING: 'Working',
+  EPISODIC: 'Episodic',
+  KNOWLEDGE: 'User profile',
+}
+const MEMORY_LAYER_HINTS: Record<MemoryLayer, string> = {
+  WORKING: "This session's chat history (Redis)",
+  EPISODIC: 'Compressed summaries of past sessions (MongoDB)',
+  KNOWLEDGE: 'Stable user preferences (MongoDB)',
+}
+
+// The protocols a gargantua Runtime can actually serve today, with the real
+// endpoint each one answers on (agent-engine CapabilitiesController,
+// agent-runtime PactController, agent-engine ChatController, agent-mcp-server
+// AgentMcpProperties' default transport path) — no free-text URL to get wrong.
+const KNOWN_INTERFACES: { protocol: string; label: string; endpoint: string; hint: string }[] = [
+  { protocol: 'a2a', label: 'A2A', endpoint: '/.well-known/agent.json', hint: 'Always served — checking this only documents it in the manifest' },
+  { protocol: 'mcp', label: 'MCP server', endpoint: '/mcp', hint: 'Opt-in at deploy time (agent.mcp.enabled) — checking this here does not turn it on' },
+]
 
 interface Props {
   draft: AgentDraft
@@ -57,33 +81,6 @@ export function AgentDesigner({ draft, onChange, editingExisting }: Props) {
   const patchModel = (partial: Partial<AgentDraft['model']>) =>
     patch({ model: { ...draft.model, ...partial } })
 
-  // Heuristic: parse a model string like "gpt-4o" or "claude-sonnet-4-20250514"
-  // into provider/family/name for the PACT Cognition section.
-  const parseModelString = (s: string): { provider: string; family: string; name: string } => {
-    const t = s.trim().toLowerCase()
-    if (!t) return { provider: '', family: '', name: '' }
-    if (t.includes('gpt')) return { provider: 'openai', family: 'gpt', name: s }
-    if (t.includes('claude')) return { provider: 'anthropic', family: 'claude', name: s }
-    if (t.includes('gemini')) return { provider: 'google', family: 'gemini', name: s }
-    if (t.includes('phi')) return { provider: 'microsoft', family: 'phi', name: s }
-    if (t.includes('llama')) return { provider: 'meta', family: 'llama', name: s }
-    if (t.includes('mistral')) return { provider: 'mistral', family: 'mistral', name: s }
-    if (t.includes('qwen')) return { provider: 'alibaba', family: 'qwen', name: s }
-    if (t.includes('deepseek')) return { provider: 'deepseek', family: 'deepseek', name: s }
-    return { provider: '', family: '', name: s }
-  }
-
-  const setPrimaryModel = (v: string) => {
-    patchModel({ primary: v })
-    const { provider, family, name } = parseModelString(v)
-    patchCognition({ primaryModel: { provider, family, name } })
-  }
-  const setFallbackModel = (v: string) => {
-    patchModel({ fallback: v })
-    const { provider, family, name } = parseModelString(v)
-    patchCognition({ fallbackModel: { provider, family, name } })
-  }
-
   // ---- capabilities (the only place a skill is linked to this agent) ----
   const setCapability = (i: number, partial: Partial<CapabilityDraft>) =>
     patch({
@@ -93,6 +90,8 @@ export function AgentDesigner({ draft, onChange, editingExisting }: Props) {
   const removeCapability = (i: number) =>
     patch({ capabilities: draft.capabilities.filter((_, idx) => idx !== i) })
   // A capability IS a skill: picking one derives every other field on the card.
+  // Everything about it — including input schema and tags — is authored in the
+  // Skill Designer, never here; this form only references a skill by name.
   const setCapabilitySkill = (i: number, skillName: string) => {
     const skill = savedSkills.find((s) => s.draft.name === skillName)?.draft
     setCapability(i, applySkillToCapability(skillName, skill))
@@ -109,6 +108,16 @@ export function AgentDesigner({ draft, onChange, editingExisting }: Props) {
   const removeServer = (i: number) =>
     patch({ mcpServers: draft.mcpServers.filter((_, idx) => idx !== i) })
 
+  // ---- memory layers (toggle set — see the section hint on enforcement scope) ----
+  const toggleLayer = (layer: MemoryLayer) => {
+    const has = draft.memoryLayers.includes(layer)
+    patch({
+      memoryLayers: has
+        ? draft.memoryLayers.filter((l) => l !== layer)
+        : [...draft.memoryLayers, layer],
+    })
+  }
+
   // ---- guardrails ----
   const setGuardrail = (i: number, partial: Partial<GuardrailDraft>) =>
     patch({
@@ -120,55 +129,17 @@ export function AgentDesigner({ draft, onChange, editingExisting }: Props) {
   const removeGuardrail = (i: number) =>
     patch({ guardrails: draft.guardrails.filter((_, idx) => idx !== i) })
 
-  // ---- loadout (knowledge bases, memory scopes, skills, resources) ----
-  const patchLoadout = (partial: Partial<LoadoutDraft>) =>
-    patch({ loadout: { ...draft.loadout, ...partial } })
-  const setKnowledge = (i: number, partial: Partial<KnowledgeRefDraft>) =>
-    patchLoadout({
-      knowledge: draft.loadout.knowledge.map((k, idx) => (idx === i ? { ...k, ...partial } : k)),
-    })
-  const addKnowledge = () =>
-    patchLoadout({ knowledge: [...draft.loadout.knowledge, emptyKnowledgeRef()] })
-  const removeKnowledge = (i: number) =>
-    patchLoadout({ knowledge: draft.loadout.knowledge.filter((_, idx) => idx !== i) })
-  const setResource = (i: number, partial: Partial<ResourceRefDraft>) =>
-    patchLoadout({
-      resources: draft.loadout.resources.map((r, idx) => (idx === i ? { ...r, ...partial } : r)),
-    })
-  const addResource = () =>
-    patchLoadout({ resources: [...draft.loadout.resources, emptyResourceRef()] })
-  const removeResource = (i: number) =>
-    patchLoadout({ resources: draft.loadout.resources.filter((_, idx) => idx !== i) })
-
   // ---- governance (tenant, visibility, status, ACL) ----
   const patchGovernance = (partial: Partial<GovernanceDraft>) =>
     patch({ governance: { ...draft.governance, ...partial } })
 
-  // ---- PACT Core: cognition, contract, interfaces (declarative — see agent-manifest.md
-  // "Relationship to PACT") ----
-  const patchCognition = (partial: Partial<CognitionDraft>) =>
-    patch({ cognition: { ...draft.cognition, ...partial } })
-  const patchPrimaryModel = (partial: Partial<ModelDescriptorDraft>) =>
-    patchCognition({ primaryModel: { ...draft.cognition.primaryModel, ...partial } })
-  const patchFallbackModel = (partial: Partial<ModelDescriptorDraft>) =>
-    patchCognition({ fallbackModel: { ...draft.cognition.fallbackModel, ...partial } })
-  const patchContract = (partial: Partial<ContractDraft>) =>
-    patch({ contract: { ...draft.contract, ...partial } })
-  const setInterface = (i: number, partial: Partial<InterfaceEndpointDraft>) =>
+  // ---- interfaces (fixed checkbox set against KNOWN_INTERFACES, not free text) ----
+  const toggleInterface = (known: (typeof KNOWN_INTERFACES)[number]) => {
+    const has = draft.interfaces.some((i) => i.protocol === known.protocol)
     patch({
-      interfaces: draft.interfaces.map((e, idx) => (idx === i ? { ...e, ...partial } : e)),
-    })
-  const addInterface = () => patch({ interfaces: [...draft.interfaces, emptyInterfaceEndpoint()] })
-  const removeInterface = (i: number) =>
-    patch({ interfaces: draft.interfaces.filter((_, idx) => idx !== i) })
-
-  // ---- memory layers (toggle set) ----
-  const toggleLayer = (layer: MemoryLayer) => {
-    const has = draft.memoryLayers.includes(layer)
-    patch({
-      memoryLayers: has
-        ? draft.memoryLayers.filter((l) => l !== layer)
-        : [...draft.memoryLayers, layer],
+      interfaces: has
+        ? draft.interfaces.filter((i) => i.protocol !== known.protocol)
+        : [...draft.interfaces, { protocol: known.protocol, endpoint: known.endpoint, version: '' }],
     })
   }
 
@@ -201,7 +172,7 @@ export function AgentDesigner({ draft, onChange, editingExisting }: Props) {
       </Section>
 
       <Section
-        title="Governance"
+        title="Governance & access"
         hint="Cross-cutting ownership and visibility for the Catalog. Reported now; the Policy Manager enforces it later. (created/updated timestamps are assigned by the Control Plane.)"
       >
         <div className="grid three">
@@ -219,27 +190,22 @@ export function AgentDesigner({ draft, onChange, editingExisting }: Props) {
             <TextInput value={draft.governance.status} onChange={(v) => patchGovernance({ status: v })} placeholder="active" mono />
           </Field>
         </div>
-        <Field label="Access (ACL)" hint="Who can discover/find this agent in the Catalog beyond what Visibility implies — not who can call it (see Allowed roles, under Routing & roles below)">
+        <Field label="Access (ACL)" hint="Who can discover/find this agent in the Catalog, beyond what Visibility implies">
           <TextInput value={draft.governance.accessText} onChange={(v) => patchGovernance({ accessText: v })} placeholder="ops, support" />
         </Field>
       </Section>
 
       <Section title="Runtime" hint="Which image the bundle needs. Leave blank for the platform default.">
-        <div className="grid two">
-          <Field label="Image" hint="Name a custom image only for library-mode Java tools">
-            <TextInput value={draft.runtime.image} onChange={(v) => patchRuntime({ image: v })} placeholder="ghcr.io/giskardb/gargantua-runtime:1.0" mono />
-          </Field>
-          <Field label="Min version" hint="Recorded for the Deployment Manager; not verified by the runtime">
-            <TextInput value={draft.runtime.minVersion} onChange={(v) => patchRuntime({ minVersion: v })} placeholder="1.0" mono />
-          </Field>
-        </div>
+        <Field label="Image" hint="Name a custom image only for library-mode Java tools">
+          <TextInput value={draft.runtime.image} onChange={(v) => patchRuntime({ image: v })} placeholder="ghcr.io/giskardb/gargantua-runtime:1.0" mono />
+        </Field>
       </Section>
 
-      <Section title="Model" hint="Model names only — endpoints and keys come from the runtime environment. The Cognition section below is filled in automatically from these names (provider/family), so write it here first.">
+      <Section title="Model" hint="Model names only — endpoints and keys come from the runtime environment. Applied by the runtime.">
         <div className="grid three">
-          <Field label="Primary"><TextInput value={draft.model.primary} onChange={setPrimaryModel} placeholder="gpt-4o" mono /></Field>
-          <Field label="Fallback"><TextInput value={draft.model.fallback} onChange={setFallbackModel} placeholder="claude-sonnet-4-20250514" mono /></Field>
-          <Field label="Routing"><TextInput value={draft.model.routing} onChange={(v) => patchModel({ routing: v })} placeholder="phi4-mini" mono /></Field>
+          <Field label="Primary"><TextInput value={draft.model.primary} onChange={(v) => patchModel({ primary: v })} placeholder="gpt-4o" mono /></Field>
+          <Field label="Fallback"><TextInput value={draft.model.fallback} onChange={(v) => patchModel({ fallback: v })} placeholder="claude-sonnet-4-20250514" mono /></Field>
+          <Field label="Routing" hint="Small/cheap model used for intent routing"><TextInput value={draft.model.routing} onChange={(v) => patchModel({ routing: v })} placeholder="phi4-mini" mono /></Field>
         </div>
         <div className="grid two">
           <Field label="Temperature" hint="0.0 – 2.0"><TextInput value={draft.model.temperature} onChange={(v) => patchModel({ temperature: v })} placeholder="0.7" mono /></Field>
@@ -249,8 +215,12 @@ export function AgentDesigner({ draft, onChange, editingExisting }: Props) {
 
       <Section
         title="Capabilities"
-        hint="The external contract callers route on. Every capability is a skill — pick one (write it in the Skill Designer first) and its name, version, description and output schema are derived from it. This is the only place a skill becomes an advertised, routable capability — Loadout > Skills below equips extra skills without exposing them externally."
+        hint="The external contract callers route on, plus which skill handles anything that doesn't match one. Every capability is a skill — pick one, written in the Skill Designer first. Editing a skill's content, input schema or tags happens there, never here; this form only references it by name."
       >
+        <Field label="Default skill" hint="Fallback when nothing matches a capability — applied, binds to agent.routing.fallback-skill">
+          <TextInput value={draft.defaultSkill} onChange={(v) => patch({ defaultSkill: v })} placeholder="default-skill" mono />
+        </Field>
+
         {draft.capabilities.length === 0 && <p className="empty">No capabilities yet.</p>}
         {draft.capabilities.map((c, i) => (
           <div className="card" key={i}>
@@ -258,7 +228,7 @@ export function AgentDesigner({ draft, onChange, editingExisting }: Props) {
               <strong>Capability {i + 1}</strong>
               <button className="link danger" onClick={() => removeCapability(i)}>remove</button>
             </div>
-            <Field label="Skill" required hint="Derives name, version, description and output schema. Input schema and tags below are not derived — fill them in yourself.">
+            <Field label="Skill" required hint="Everything below is derived from the skill">
               <select value={c.implementedBy} onChange={(e) => setCapabilitySkill(i, e.target.value)}>
                 <option value="">Select a skill…</option>
                 {savedSkills.map((s) => s.draft.name && (
@@ -276,14 +246,6 @@ export function AgentDesigner({ draft, onChange, editingExisting }: Props) {
             ) : (
               <p className="empty">Pick a skill to fill in this capability.</p>
             )}
-            <div className="grid two">
-              <Field label="Input schema" hint="Bundle-relative path or inline schema; not derived from the skill">
-                <TextInput value={c.inputSchema} onChange={(v) => setCapability(i, { inputSchema: v })} placeholder="schemas/refund-input.json" mono />
-              </Field>
-              <Field label="Tags" hint="Comma-separated, for Catalog search/filtering">
-                <TextInput value={c.tags} onChange={(v) => setCapability(i, { tags: v })} placeholder="payments, gdpr" mono />
-              </Field>
-            </div>
           </div>
         ))}
         <button className="add" onClick={addCapability}>+ Add capability</button>
@@ -334,87 +296,25 @@ export function AgentDesigner({ draft, onChange, editingExisting }: Props) {
         <button className="add" onClick={addServer}>+ Add MCP server</button>
       </Section>
 
-      <Section title="Memory layers" hint="Leave all unchecked to enable all three. (Manifest-level selection is reported, not yet enforced.)">
+      <Section
+        title="Memory"
+        hint="Which memory tiers this agent uses (session/summaries/user profile, on Redis/MongoDB). Applied — binds onto agent.memory.layers, agent-wide for every skill this agent runs. Leave all unchecked to enable all three."
+      >
         <div className="chips">
           {MEMORY_LAYERS.map((layer) => (
             <button
               key={layer}
               className={draft.memoryLayers.includes(layer) ? 'chip on' : 'chip'}
               onClick={() => toggleLayer(layer)}
+              title={MEMORY_LAYER_HINTS[layer]}
             >
-              {layer}
+              {MEMORY_LAYER_LABELS[layer]}
             </button>
           ))}
         </div>
       </Section>
 
-      <Section
-        title="Loadout"
-        hint="What this agent is equipped with — specific knowledge bases, memory scopes, skills and resources — rather than implicit access to everything. (Reported by the runtime; provisioning is not enforced yet.)"
-      >
-        <div className="sub">Knowledge bases</div>
-        {draft.loadout.knowledge.length === 0 && (
-          <p className="empty">No knowledge bases equipped.</p>
-        )}
-        {draft.loadout.knowledge.map((k, i) => (
-          <div className="card" key={i}>
-            <div className="card-head">
-              <strong>Knowledge {i + 1}</strong>
-              <button className="link danger" onClick={() => removeKnowledge(i)}>remove</button>
-            </div>
-            <div className="grid three">
-              <Field label="Name" required hint="Vector collection / index name">
-                <TextInput value={k.name} onChange={(v) => setKnowledge(i, { name: v })} placeholder="payments-kb" mono />
-              </Field>
-              <Field label="Max results" hint="Empty = skill default">
-                <TextInput value={k.maxResults} onChange={(v) => setKnowledge(i, { maxResults: v })} placeholder="8" mono />
-              </Field>
-              <Field label="Min score" hint="0.0 – 1.0; empty = default">
-                <TextInput value={k.minScore} onChange={(v) => setKnowledge(i, { minScore: v })} placeholder="0.55" mono />
-              </Field>
-            </div>
-            <Field label="Description">
-              <TextInput value={k.description} onChange={(v) => setKnowledge(i, { description: v })} placeholder="Payment policies and refund rules" />
-            </Field>
-          </div>
-        ))}
-        <button className="add" onClick={addKnowledge}>+ Add knowledge base</button>
-
-        <div className="grid two">
-          <Field label="Memory scopes" hint="Comma-separated named memory collections">
-            <TextInput value={draft.loadout.memoryScopesText} onChange={(v) => patchLoadout({ memoryScopesText: v })} placeholder="customer-history" mono />
-          </Field>
-          <Field label="Skills" hint="Comma-separated skill names to equip beyond Default skill — free text, not checked against the Skill Designer; does not advertise a Capability (use the Capabilities section above for that)">
-            <TextInput value={draft.loadout.skillsText} onChange={(v) => patchLoadout({ skillsText: v })} placeholder="refund-skill, status-skill" mono />
-          </Field>
-        </div>
-
-        <div className="sub">Resources</div>
-        {draft.loadout.resources.length === 0 && <p className="empty">No resources equipped.</p>}
-        {draft.loadout.resources.map((r, i) => (
-          <div className="card" key={i}>
-            <div className="card-head">
-              <strong>Resource {i + 1}</strong>
-              <button className="link danger" onClick={() => removeResource(i)}>remove</button>
-            </div>
-            <div className="grid three">
-              <Field label="Name" required><TextInput value={r.name} onChange={(v) => setResource(i, { name: v })} placeholder="refund-form" mono /></Field>
-              <Field label="Type" hint="file, dataset, http, s3…"><TextInput value={r.type} onChange={(v) => setResource(i, { type: v })} placeholder="file" mono /></Field>
-              <Field label="URI" hint="No secrets — reference by ${secrets.NAME}"><TextInput value={r.uri} onChange={(v) => setResource(i, { uri: v })} placeholder="resources/refund.pdf" mono /></Field>
-            </div>
-          </div>
-        ))}
-        <button className="add" onClick={addResource}>+ Add resource</button>
-      </Section>
-
-      <Section title="Routing & roles">
-        <div className="grid two">
-          <Field label="Default skill" hint="Entry skill; binds to agent.routing.fallback-skill"><TextInput value={draft.defaultSkill} onChange={(v) => patch({ defaultSkill: v })} placeholder="default-skill" mono /></Field>
-          <Field label="Allowed roles" hint="Who can invoke this agent at runtime — not who can find it in the Catalog (see Access (ACL), under Governance above). Comma-separated; reported, not yet enforced at workload level"><TextInput value={draft.allowedRolesText} onChange={(v) => patch({ allowedRolesText: v })} placeholder="support-agent, super-admin" /></Field>
-        </div>
-      </Section>
-
-      <Section title="Guardrails" hint="Raw overrides keyed by guardrail name; each value is a JSON object.">
+      <Section title="Guardrails" hint="Raw overrides keyed by guardrail name; each value is a JSON object. Applied — binds onto agent.guardrail.*.">
         {draft.guardrails.length === 0 && <p className="empty">No guardrail overrides yet.</p>}
         {draft.guardrails.map((g, i) => (
           <div className="card" key={i}>
@@ -432,77 +332,17 @@ export function AgentDesigner({ draft, onChange, editingExisting }: Props) {
       </Section>
 
       <Section
-        title="Cognition (PACT)"
-        hint="What kind of reasoning this agent exposes, vendor-neutrally. Declarative only — not enforced by the runtime, by design (PACT §31). Provider/family are auto-derived from the Primary/Fallback model names in the Model section above (not Routing, which stays operational-only); override here if they differ."
+        title="Interfaces"
+        hint="How this agent can be reached. A checklist, not a switch: gargantua doesn't read this to turn anything on or off. A2A is always served regardless of what's checked here; MCP server mode is a separate deploy-time flag (agent.mcp.enabled). Check what you want documented in the manifest."
       >
-        <div className="grid two">
-          <Field label="Modalities" hint="Comma-separated, e.g. text, image">
-            <TextInput value={draft.cognition.modalitiesText} onChange={(v) => patchCognition({ modalitiesText: v })} placeholder="text, image" mono />
-          </Field>
-          <Field label="Cognitive capabilities" hint="Comma-separated, e.g. reasoning, planning">
-            <TextInput value={draft.cognition.capabilitiesText} onChange={(v) => patchCognition({ capabilitiesText: v })} placeholder="reasoning, planning" mono />
-          </Field>
-        </div>
-
-        <div className="sub">Primary model — semantic, not an alias like the Model section above</div>
-        <div className="grid three">
-          <Field label="Provider"><TextInput value={draft.cognition.primaryModel.provider} onChange={(v) => patchPrimaryModel({ provider: v })} placeholder="anthropic" mono /></Field>
-          <Field label="Family"><TextInput value={draft.cognition.primaryModel.family} onChange={(v) => patchPrimaryModel({ family: v })} placeholder="claude" mono /></Field>
-          <Field label="Name" hint="Optional concrete model"><TextInput value={draft.cognition.primaryModel.name} onChange={(v) => patchPrimaryModel({ name: v })} mono /></Field>
-        </div>
-
-        <div className="sub">Fallback model</div>
-        <div className="grid three">
-          <Field label="Provider"><TextInput value={draft.cognition.fallbackModel.provider} onChange={(v) => patchFallbackModel({ provider: v })} placeholder="openai" mono /></Field>
-          <Field label="Family"><TextInput value={draft.cognition.fallbackModel.family} onChange={(v) => patchFallbackModel({ family: v })} placeholder="gpt" mono /></Field>
-          <Field label="Name" hint="Optional concrete model"><TextInput value={draft.cognition.fallbackModel.name} onChange={(v) => patchFallbackModel({ name: v })} mono /></Field>
-        </div>
-
-        <div className="sub">Requirements — what the hosting substrate must provide, not what this agent offers</div>
-        <div className="grid three">
-          <Field label="Required modalities" hint="Comma-separated"><TextInput value={draft.cognition.requiredModalitiesText} onChange={(v) => patchCognition({ requiredModalitiesText: v })} placeholder="text" mono /></Field>
-          <Field label="Required capabilities" hint="Comma-separated"><TextInput value={draft.cognition.requiredCapabilitiesText} onChange={(v) => patchCognition({ requiredCapabilitiesText: v })} placeholder="reasoning" mono /></Field>
-          <Field label="Min context window" hint="Tokens"><TextInput value={draft.cognition.contextWindowMinimum} onChange={(v) => patchCognition({ contextWindowMinimum: v })} placeholder="64000" mono /></Field>
-        </div>
-      </Section>
-
-      <Section
-        title="Contract (PACT)"
-        hint="Basic semantic conditions this agent claims to operate under. Declarative only — not a security control; use Allowed roles and Guardrails above for anything actually enforced."
-      >
-        <div className="grid two">
-          <Field label="Autonomy level" hint="0 passive · 1 assistive · 2 recommending · 3 executing · 4 autonomous">
-            <Select
-              value={draft.contract.autonomyLevel}
-              options={['', '0', '1', '2', '3', '4'] as const}
-              onChange={(v) => patchContract({ autonomyLevel: v })}
-            />
-          </Field>
-          <Field label="Permissions" hint="Comma-separated; claimed, not granted — no controlled vocabulary">
-            <TextInput value={draft.contract.permissionsText} onChange={(v) => patchContract({ permissionsText: v })} placeholder="read_repository" mono />
-          </Field>
-        </div>
-      </Section>
-
-      <Section
-        title="Interfaces (PACT)"
-        hint="How another system may reach this agent, beyond the built-in A2A endpoint every agent already exposes at /.well-known/agent.json."
-      >
-        {draft.interfaces.length === 0 && <p className="empty">No additional interfaces declared.</p>}
-        {draft.interfaces.map((e, i) => (
-          <div className="card" key={i}>
-            <div className="card-head">
-              <strong>Interface {i + 1}</strong>
-              <button className="link danger" onClick={() => removeInterface(i)}>remove</button>
-            </div>
-            <div className="grid three">
-              <Field label="Protocol" required><TextInput value={e.protocol} onChange={(v) => setInterface(i, { protocol: v })} placeholder="a2a" mono /></Field>
-              <Field label="Endpoint" required><TextInput value={e.endpoint} onChange={(v) => setInterface(i, { endpoint: v })} placeholder="https://.../.well-known/agent.json" mono /></Field>
-              <Field label="Version"><TextInput value={e.version} onChange={(v) => setInterface(i, { version: v })} placeholder="1.0" mono /></Field>
-            </div>
-          </div>
+        {KNOWN_INTERFACES.map((known) => (
+          <Checkbox
+            key={known.protocol}
+            checked={draft.interfaces.some((i) => i.protocol === known.protocol)}
+            onChange={() => toggleInterface(known)}
+            label={`${known.label} — ${known.hint}`}
+          />
         ))}
-        <button className="add" onClick={addInterface}>+ Add interface</button>
       </Section>
     </div>
   )
