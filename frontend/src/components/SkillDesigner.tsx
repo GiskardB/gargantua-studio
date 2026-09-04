@@ -3,7 +3,6 @@
 // draft and emits a new one, so the SKILL.md preview stays in sync with no extra wiring.
 
 import type { SkillDraft } from '../types/skillDraft'
-import { MEMORY_LAYERS, type MemoryLayer } from '../types/manifest'
 import { Section, Field, TextInput, TextArea, Checkbox } from './fields'
 import { ReferenceFileUpload } from './ReferenceFileUpload'
 
@@ -14,15 +13,6 @@ interface Props {
 
 export function SkillDesigner({ draft, onChange }: Props) {
   const patch = (partial: Partial<SkillDraft>) => onChange({ ...draft, ...partial })
-
-  const toggleLayer = (layer: MemoryLayer) => {
-    const has = draft.memoryLayers.includes(layer)
-    patch({
-      memoryLayers: has
-        ? draft.memoryLayers.filter((l) => l !== layer)
-        : [...draft.memoryLayers, layer],
-    })
-  }
 
   return (
     <div className="designer">
@@ -82,7 +72,7 @@ export function SkillDesigner({ draft, onChange }: Props) {
         </div>
       </Section>
 
-      <Section title="Knowledge & memory">
+      <Section title="Knowledge" hint="Memory is configured once for the whole agent, not per skill — see the Memory section in the Agent Designer.">
         <Field label="Output schema" hint="Bundle-relative path or inline JSON Schema">
           <TextInput value={draft.outputSchema} onChange={(v) => patch({ outputSchema: v })} placeholder="assets/schema.json" mono />
         </Field>
@@ -97,13 +87,6 @@ export function SkillDesigner({ draft, onChange }: Props) {
             <TextInput value={draft.ragMinScore} onChange={(v) => patch({ ragMinScore: v })} mono />
           </Field>
         </div>
-        <Field label="Memory layers" hint="None selected = fetch all layers">
-          <div className="chips">
-            {MEMORY_LAYERS.map((l) => (
-              <Checkbox key={l} checked={draft.memoryLayers.includes(l)} onChange={() => toggleLayer(l)} label={l} />
-            ))}
-          </div>
-        </Field>
       </Section>
 
       <Section title="Access & discovery">
